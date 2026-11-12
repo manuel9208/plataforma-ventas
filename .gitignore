@@ -1,0 +1,25 @@
+# Dependencias
+node_modules/
+
+# SECRETOS: nunca se suben a Git
+.env
+.env.*
+!.env.example
+
+# Resultados de compilar
+dist/
+build/
+
+# Registros
+*.log
+npm-debug.log*
+
+# Sistema operativo y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Respaldos locales de base de datos
+*.dump
+*.backup
