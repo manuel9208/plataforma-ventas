@@ -1,0 +1,1 @@
+export const ETIQUETA_FORMA = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia' };

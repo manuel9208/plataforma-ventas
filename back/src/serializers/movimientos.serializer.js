@@ -1,0 +1,15 @@
+export const movimiento = (m) => ({
+  id: m.id,
+  tipo: m.tipo,
+  categoria: m.categoria,
+  concepto: m.concepto,
+  monto: Number(m.monto),
+  recibe: m.recibe_nombre,
+  referencia: m.referencia,
+  creadoEn: m.creado_en,
+  hizo: m.hizo,
+  anulado: Boolean(m.anulado_en),
+  anuladoEn: m.anulado_en,
+  anuladoMotivo: m.anulado_motivo,
+  anulo: m.anulo,
+});

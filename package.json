@@ -1,0 +1,8 @@
+{
+  "name": "plataforma-ventas",
+  "private": true,
+  "workspaces": ["back", "front", "shared"],
+  "scripts": {
+    "test": "node --test"
+  }
+}

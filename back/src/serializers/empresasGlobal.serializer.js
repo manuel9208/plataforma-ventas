@@ -1,0 +1,16 @@
+export const empresaGlobal = (e) => ({
+  id: e.id,
+  slug: e.slug,
+  nombre: e.nombre,
+  tipoNegocio: e.tipo_negocio,
+  zonaHoraria: e.zona_horaria,
+  moneda: e.moneda,
+  dominios: e.dominios_permitidos ?? [],
+  activo: e.activo,
+  suspendida: e.suspendida,
+  suspensionMotivo: e.suspension_motivo,
+  suspendidaEn: e.suspendida_en,
+  creadaEn: e.creado_en,
+  sucursales: Number(e.sucursales ?? 0),
+  empleados: Number(e.empleados ?? 0),
+});

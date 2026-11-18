@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+/* Colores por defecto. Más adelante cada empresa los reemplaza desde la base de datos. */
+:root {
+  --c-primario: #1d2b4f;
+  --c-primario-2: #31457d;
+  --c-acento: #c9a25c;
+  --c-fondo: #f5f2ec;
+  --c-texto: #161d33;
+  --c-borde: #e8e2d6;
+}
+
+html,
+body,
+#root {
+  min-height: 100dvh;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(900px 480px at 100% -10%, rgba(201, 162, 92, 0.16), transparent 60%),
+    radial-gradient(700px 420px at -10% 110%, rgba(49, 69, 125, 0.1), transparent 60%),
+    var(--c-fondo);
+  color: var(--c-texto);
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
+}
+
+::selection {
+  background: rgba(201, 162, 92, 0.35);
+}

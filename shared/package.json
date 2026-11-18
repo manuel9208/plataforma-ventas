@@ -1,0 +1,7 @@
+{
+  "name": "@plataforma/calculos",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./calculos/index.js"
+}
