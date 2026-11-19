@@ -2,6 +2,7 @@ import { exigirEmpresa } from '../utils/tenant.js';
 
 const COLUMNAS = `
   c.id, c.sucursal_id, s.nombre AS sucursal_nombre, c.nombre, c.activo,
+  c.ancho_papel, c.corte_automatico, c.abrir_cajon, c.imprimir_area,
   (SELECT COALESCE(json_agg(json_build_object('id', u.id, 'nombre', u.nombre) ORDER BY u.nombre), '[]'::json)
      FROM caja_usuarios cu
      JOIN usuarios u ON u.id = cu.usuario_id AND u.empresa_id = cu.empresa_id
@@ -17,7 +18,7 @@ const FROM = `
   JOIN sucursales s ON s.id = c.sucursal_id AND s.empresa_id = c.empresa_id
   WHERE c.empresa_id = $1 AND c.sucursal_id = ANY($2::bigint[])`;
 
-const EDITABLES = new Set(['nombre', 'activo']);
+const EDITABLES = new Set(['nombre', 'activo', 'ancho_papel', 'corte_automatico', 'abrir_cajon', 'imprimir_area']);
 
 export async function listar(db, empresaId, sucursales, { sucursalId, activo }) {
   exigirEmpresa(empresaId);
@@ -116,4 +117,17 @@ export async function asignar(db, empresaId, usuarioId, cajaId) {
 export async function quitarAsignacion(db, empresaId, usuarioId) {
   exigirEmpresa(empresaId);
   await db.query(`DELETE FROM caja_usuarios WHERE empresa_id = $1 AND usuario_id = $2`, [empresaId, usuarioId]);
+}
+
+// Impresión de la caja asignada al empleado (la Caja la usa para armar sus tickets)
+export async function impresionDeUsuario(db, empresaId, usuarioId) {
+  exigirEmpresa(empresaId);
+  const r = await db.query(
+    `SELECT c.ancho_papel, c.corte_automatico, c.abrir_cajon, c.imprimir_area
+     FROM caja_usuarios cu
+     JOIN cajas c ON c.id = cu.caja_id AND c.empresa_id = cu.empresa_id
+     WHERE cu.empresa_id = $1 AND cu.usuario_id = $2`,
+    [empresaId, usuarioId]
+  );
+  return r.rows[0] || null;
 }

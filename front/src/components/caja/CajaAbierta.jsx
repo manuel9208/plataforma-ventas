@@ -10,6 +10,7 @@ import GastosCaja from './GastosCaja.jsx';
 import AvisoRetiro from './AvisoRetiro.jsx';
 import { useMovimientos } from './useMovimientos.js';
 import { useConfigNota } from './useConfigNota.js';
+import ModalImpresoraEquipo from './ModalImpresoraEquipo.jsx';
 
 const TIPOS = {
   servicios: { id: 'servicios', nombre: 'Servicios' },
@@ -27,6 +28,7 @@ export default function CajaAbierta({ estado, onCerrar }) {
   const [operando, setOperando] = useState(false); // cobro de saldo, entrega, devolución…
   const [modo, setModo] = useState('vender');
   const [tipoElegido, setTipoElegido] = useState(null);
+  const [impresora, setImpresora] = useState(false);
 
   // Qué se vende y qué ve primero la caja (viene del servidor; mientras carga, lo de siempre según el giro)
   const vendeServicios = config ? config.vendeServicios : esLimpieza;
@@ -67,6 +69,13 @@ export default function CajaAbierta({ estado, onCerrar }) {
             <Segmentos compacto opciones={tipos} valor={tipoVenta} onCambio={setTipoElegido} />
           </>
         )}
+        <button
+          type="button"
+          onClick={() => setImpresora(true)}
+          className="ml-auto min-h-9 px-3 rounded-xl border border-[var(--c-borde)] bg-white text-sm font-medium text-neutral-600 hover:border-[var(--c-acento)]"
+        >
+          Impresora
+        </button>
       </div>
 
       {errorConfig && (
@@ -82,6 +91,7 @@ export default function CajaAbierta({ estado, onCerrar }) {
       {modo === 'notas' && <NotasCaja onOperando={setOperando} />}
       {modo === 'ventas' && <VentasCaja onOperando={setOperando} />}
       {modo === 'gastos' && <GastosCaja mov={mov} />}
+      {impresora && <ModalImpresoraEquipo onCerrar={() => setImpresora(false)} />}
     </>
   );
 }

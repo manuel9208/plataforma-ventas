@@ -245,11 +245,13 @@ export async function cargarNota(db, empresaId, ventaId) {
   const s = await db.query(
     `SELECT vp.id, vp.orden, vp.tipo, vp.nombre, vp.total, vp.promocion_nombre, vp.descuento,
             ps.estado_trabajo, ps.fecha_prometida, ps.fecha_prometida_original, ps.tipo_articulo_nombre, ps.venta_articulo_id,
+            va.comentario,
             pa.marca, pa.talla, pa.color, pa.modelo, pa.textura, pa.descripcion,
             pe.padre_partida_id
      FROM venta_partidas vp
      LEFT JOIN partida_servicio ps ON ps.partida_id = vp.id AND ps.empresa_id = vp.empresa_id
      LEFT JOIN partida_articulos pa ON pa.partida_id = vp.id AND pa.empresa_id = vp.empresa_id
+     LEFT JOIN venta_articulos va ON va.id = ps.venta_articulo_id AND va.empresa_id = ps.empresa_id
      LEFT JOIN partida_extra pe ON pe.partida_id = vp.id AND pe.empresa_id = vp.empresa_id
      WHERE vp.empresa_id = $1 AND vp.venta_id = $2 AND vp.tipo IN ('servicio', 'extra')
      ORDER BY vp.orden`,

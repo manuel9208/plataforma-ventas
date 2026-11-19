@@ -69,6 +69,10 @@ export async function actualizar(actor, id, datos, ip) {
       const campos = {};
       if (datos.nombre !== undefined) campos.nombre = datos.nombre;
       if (datos.activo !== undefined) campos.activo = datos.activo;
+      if (datos.anchoPapel !== undefined) campos.ancho_papel = datos.anchoPapel;
+      if (datos.corteAutomatico !== undefined) campos.corte_automatico = datos.corteAutomatico;
+      if (datos.abrirCajon !== undefined) campos.abrir_cajon = datos.abrirCajon;
+      if (datos.imprimirArea !== undefined) campos.imprimir_area = datos.imprimirArea;
 
       if (datos.activo === false && antesFila.activo) {
         if (antesFila.turno_abierto) {

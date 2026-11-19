@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useCajas } from './useCajas.js';
 import FormularioCaja from './FormularioCaja.jsx';
+import ModalImpresionCaja from './ModalImpresionCaja.jsx';
 import Boton from '../../shared/Boton.jsx';
 import Insignia from '../../shared/Insignia.jsx';
 import ConfirmModal from '../../shared/ConfirmModal.jsx';
@@ -10,6 +11,7 @@ export default function GestorCajas() {
   const h = useCajas();
   const [formulario, setFormulario] = useState(null); // null cerrado, {} nueva, objeto = caja a editar
   const [confirmar, setConfirmar] = useState(null);
+  const [imprimiendo, setImprimiendo] = useState(null);
   const [procesando, setProcesando] = useState(false);
   const [errorAccion, setErrorAccion] = useState('');
 
@@ -61,6 +63,7 @@ export default function GestorCajas() {
                   <p className="text-xs text-neutral-400 mt-1 truncate">
                     {c.usuarios.length ? c.usuarios.map((u) => u.nombre).join(', ') : 'Sin empleados asignados'}
                   </p>
+                  <p className="text-xs text-neutral-400 mt-1">Papel de {c.anchoPapel} mm</p>
                   {c.turnoAbierto && <p className="text-xs text-emerald-700 mt-1">Turno abierto: {c.turnoAbierto.usuario}</p>}
                 </div>
                 <Insignia activo={c.activo} textoInactivo="Desactivada" />
@@ -68,6 +71,9 @@ export default function GestorCajas() {
               <div className="flex gap-2 mt-3">
                 <Boton compacto variante="secundario" className="flex-1" onClick={() => setFormulario(c)}>
                   Editar
+                </Boton>
+                <Boton compacto variante="secundario" className="flex-1" onClick={() => setImprimiendo(c)}>
+                  Impresión
                 </Boton>
                 <Boton compacto variante="secundario" className="flex-1" onClick={() => setConfirmar(c)}>
                   {c.activo ? 'Desactivar' : 'Activar'}
@@ -85,6 +91,15 @@ export default function GestorCajas() {
           sucursales={h.sucursales}
           onGuardar={guardar}
           onCerrar={() => setFormulario(null)}
+        />
+      )}
+
+      {imprimiendo && (
+        <ModalImpresionCaja
+          key={imprimiendo.id}
+          caja={imprimiendo}
+          onGuardar={(datos) => h.actualizar(imprimiendo.id, datos)}
+          onCerrar={() => setImprimiendo(null)}
         />
       )}
 

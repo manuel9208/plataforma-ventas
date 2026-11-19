@@ -1381,3 +1381,9 @@ CHECK (activo OR baja_motivo IS NOT NULL)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_cliente_articulos_clave ON cliente_articulos (empresa_id, cliente_id, clave) WHERE activo;
 CREATE INDEX IF NOT EXISTS idx_cliente_articulos_cliente ON cliente_articulos (empresa_id, cliente_id, ultima_vez DESC);
+
+-- ============ BLOQUE 35: IMPRESION POR CAJA ============
+ALTER TABLE cajas ADD COLUMN IF NOT EXISTS ancho_papel SMALLINT NOT NULL DEFAULT 80 CHECK (ancho_papel IN (58, 80));
+ALTER TABLE cajas ADD COLUMN IF NOT EXISTS corte_automatico BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE cajas ADD COLUMN IF NOT EXISTS abrir_cajon BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE cajas ADD COLUMN IF NOT EXISTS imprimir_area BOOLEAN NOT NULL DEFAULT TRUE;

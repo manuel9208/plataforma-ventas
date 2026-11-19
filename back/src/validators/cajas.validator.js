@@ -17,7 +17,16 @@ export const usuariosQuery = z.object({ sucursalId: z.coerce.number().int().posi
 
 export const crearBody = z.object({ sucursalId: idNumero, nombre }).strict();
 
-export const actualizarBody = z.object({ nombre: nombre.optional(), activo: z.boolean().optional() }).strict();
+export const actualizarBody = z
+  .object({
+    nombre: nombre.optional(),
+    activo: z.boolean().optional(),
+    anchoPapel: z.union([z.literal(58), z.literal(80)]).optional(),
+    corteAutomatico: z.boolean().optional(),
+    abrirCajon: z.boolean().optional(),
+    imprimirArea: z.boolean().optional(),
+  })
+  .strict();
 
 // cajaId vacío (null) = quitar la caja al empleado
 export const asignarBody = z.object({ usuarioId: idNumero, cajaId: idNumero.nullable() }).strict();

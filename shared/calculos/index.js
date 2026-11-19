@@ -20,3 +20,5 @@ export * from './configuracion.js';
 export * from './horarios.js';
 export * from './promociones.js';
 export * from './descuentos.js';
+export * from './ticketsTermicos.js';
+export * from './escpos.js';

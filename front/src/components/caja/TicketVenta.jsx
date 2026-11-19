@@ -4,6 +4,7 @@ import { ETIQUETA_FORMA } from '../../utils/formasPago.js';
 import { formatearFechaHora, formatearFechaLarga, formatearMoneda } from '../../utils/formato.js';
 import Boton from '../shared/Boton.jsx';
 import { agruparServicios } from './agruparServicios.js';
+import BotonesImpresion from './BotonesImpresion.jsx';
 
 const ESTADO_PAGO = { pendiente: 'Sin pago', abonada: 'Abonada', pagada: 'Pagada' };
 
@@ -173,6 +174,7 @@ export default function TicketVenta({ venta, onNueva, esCopia = false, onVolver 
       </div>
 
       {venta.repetida && <p className="text-center text-xs text-neutral-400">Esta venta ya estaba registrada; no se cobró de nuevo.</p>}
+      <BotonesImpresion venta={venta} esCopia={esCopia} />
       {onVolver ? (
         <Boton className="w-full" onClick={onVolver}>
           Volver a la nota
@@ -182,7 +184,6 @@ export default function TicketVenta({ venta, onNueva, esCopia = false, onVolver 
           {esNota ? 'Nueva nota' : 'Nueva venta'}
         </Boton>
       )}
-      <p className="text-center text-xs text-neutral-400">La impresión del ticket llega en una etapa posterior.</p>
     </div>
   );
 }

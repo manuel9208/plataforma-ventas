@@ -2,13 +2,18 @@ import { hoyEnZona } from '@plataforma/calculos';
 import { pool } from '../config/db.js';
 import { contextoDelTurno } from './cajaCatalogo.service.js';
 import * as repo from '../repositories/notas.repository.js';
+import * as cajasRepo from '../repositories/cajas.repository.js';
 import { servicioCaja } from '../serializers/cajaServicios.serializer.js';
+import { impresionCaja } from '../serializers/cajas.serializer.js';
 
 // Lo que la pantalla necesita para armar una nota: abono, datos del artículo, PIN y "hoy" en la zona de la sucursal
 export async function configuracion(actor) {
   const { sucursalId, zona } = await contextoDelTurno(actor);
-  const c = await repo.cargarConfig(pool, actor.empresaId, sucursalId);
-  return { ...c, hoy: hoyEnZona(zona), zonaHoraria: zona };
+  const [c, impresion] = await Promise.all([
+    repo.cargarConfig(pool, actor.empresaId, sucursalId),
+    cajasRepo.impresionDeUsuario(pool, actor.empresaId, actor.id),
+  ]);
+  return { ...c, hoy: hoyEnZona(zona), zonaHoraria: zona, impresion: impresionCaja(impresion) };
 }
 
 export async function servicios(actor, empresa, consulta) {
