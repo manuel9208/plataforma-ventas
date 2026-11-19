@@ -59,6 +59,8 @@ export function notaDetalle(v, productos, articulos, pagos, pies, ajustes = { vi
     .filter((a) => a.tipo === 'servicio')
     .map((a) => ({
       partidaId: a.id,
+      articuloId: a.venta_articulo_id ?? null,
+      comentario: a.comentario ?? null,
       nombre: a.nombre,
       tipoArticulo: a.tipo_articulo_nombre,
       estado: a.estado_trabajo,

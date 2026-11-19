@@ -48,13 +48,18 @@ const FROM_SERVICIOS = `
                 JOIN tipos_articulo ta ON ta.id = sp.tipo_articulo_id AND ta.empresa_id = sp.empresa_id AND ta.activo
                 WHERE sp.empresa_id = s.empresa_id AND sp.servicio_id = s.id)`;
 
-export async function listarServicios(db, empresaId, sucursalId, { buscar, limite, pagina }) {
+export async function listarServicios(db, empresaId, sucursalId, { buscar, ids, limite, pagina }) {
   exigirEmpresa(empresaId);
   const params = [empresaId, sucursalId];
   let filtro = '';
   if (buscar) {
     params.push(escaparLike(buscar));
-    filtro = ` AND (s.nombre ILIKE $${params.length} OR s.sku ILIKE $${params.length})`;
+    filtro += ` AND (s.nombre ILIKE $${params.length} OR s.sku ILIKE $${params.length})`;
+  }
+  // Solo para uso interno del back (los artículos guardados del cliente); nunca viene de la URL
+  if (ids?.length) {
+    params.push(ids);
+    filtro += ` AND s.id = ANY($${params.length}::bigint[])`;
   }
   const total = await db.query(`SELECT count(*) AS n ${FROM_SERVICIOS}${filtro}`, params);
 
@@ -187,9 +192,9 @@ export async function insertarServicio(db, empresaId, s) {
   await db.query(
     `INSERT INTO partida_servicio
        (partida_id, empresa_id, servicio_id, tipo_articulo_id, tipo_articulo_nombre,
-        fecha_prometida, fecha_prometida_original, recibido_por, sucursal_entrega_id)
-     VALUES ($1, $2, $3, $4, $5, $6::date, $6::date, $7, $8)`,
-    [id, empresaId, s.servicioId, s.tipoArticuloId, s.tipoNombre, s.fechaPrometida, s.usuarioId, s.sucursalId]
+        fecha_prometida, fecha_prometida_original, recibido_por, sucursal_entrega_id, venta_articulo_id)
+     VALUES ($1, $2, $3, $4, $5, $6::date, $6::date, $7, $8, $9)`,
+    [id, empresaId, s.servicioId, s.tipoArticuloId, s.tipoNombre, s.fechaPrometida, s.usuarioId, s.sucursalId, s.articuloId ?? null]
   );
 
   const a = s.articulo;
@@ -199,6 +204,16 @@ export async function insertarServicio(db, empresaId, s) {
     [id, empresaId, a.marca, a.talla, a.color, a.modelo, a.textura, a.descripcion]
   );
   return id;
+}
+
+// Un artículo físico de la nota (puede llevar varios servicios). El id lo genera la base de datos.
+export async function insertarArticuloNota(db, empresaId, a) {
+  exigirEmpresa(empresaId);
+  const r = await db.query(
+    `INSERT INTO venta_articulos (empresa_id, venta_id, orden, comentario) VALUES ($1, $2, $3, $4) RETURNING id`,
+    [empresaId, a.ventaId, a.orden, a.comentario]
+  );
+  return r.rows[0].id;
 }
 
 export async function insertarExtra(db, empresaId, x) {
@@ -229,7 +244,7 @@ export async function cargarNota(db, empresaId, ventaId) {
 
   const s = await db.query(
     `SELECT vp.id, vp.orden, vp.tipo, vp.nombre, vp.total, vp.promocion_nombre, vp.descuento,
-            ps.estado_trabajo, ps.fecha_prometida, ps.fecha_prometida_original, ps.tipo_articulo_nombre,
+            ps.estado_trabajo, ps.fecha_prometida, ps.fecha_prometida_original, ps.tipo_articulo_nombre, ps.venta_articulo_id,
             pa.marca, pa.talla, pa.color, pa.modelo, pa.textura, pa.descripcion,
             pe.padre_partida_id
      FROM venta_partidas vp

@@ -5,7 +5,7 @@ const escaparLike = (t) => `%${t.replace(/[\\%_]/g, '\\$&')}%`;
 // Cada columna sale de esta lista, nunca del usuario. Las fechas salen como texto para no depender de la zona.
 const SUCURSAL_IDS = `(SELECT COALESCE(array_agg(ps.sucursal_id ORDER BY ps.sucursal_id), '{}'::bigint[])
                        FROM promocion_sucursales ps WHERE ps.empresa_id = p.empresa_id AND ps.promocion_id = p.id)`;
-const COLUMNAS = `p.id, p.nombre, p.tipo, p.modo, p.valor, p.precio_combo, p.aplica_a,
+const COLUMNAS = `p.id, p.nombre, p.tipo, p.modo, p.valor, p.precio_combo, p.lleva, p.paga, p.aplica_a,
   to_char(p.desde, 'YYYY-MM-DD') AS desde, to_char(p.hasta, 'YYYY-MM-DD') AS hasta,
   p.dias, p.hora_desde, p.hora_hasta, p.encendida, p.creado_en, ${SUCURSAL_IDS} AS sucursal_ids`;
 
@@ -144,11 +144,11 @@ export async function insertar(db, empresaId, p, autor) {
   exigirEmpresa(empresaId);
   const r = await db.query(
     `INSERT INTO promociones
-       (empresa_id, nombre, tipo, modo, valor, precio_combo, aplica_a, desde, hasta, dias, hora_desde, hora_hasta,
+       (empresa_id, nombre, tipo, modo, valor, precio_combo, lleva, paga, aplica_a, desde, hasta, dias, hora_desde, hora_hasta,
         creado_por_usuario, creado_por_global)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9::date, $10::text[], $11, $12, $13, $14)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::date, $11::date, $12::text[], $13, $14, $15, $16)
      RETURNING id`,
-    [empresaId, p.nombre, p.tipo, p.modo, p.valor, p.precioCombo, p.aplicaA, p.desde, p.hasta, p.dias, p.horaDesde, p.horaHasta, autor.usuarioId, autor.adminGlobalId]
+    [empresaId, p.nombre, p.tipo, p.modo, p.valor, p.precioCombo, p.lleva, p.paga, p.aplicaA, p.desde, p.hasta, p.dias, p.horaDesde, p.horaHasta, autor.usuarioId, autor.adminGlobalId]
   );
   return r.rows[0].id;
 }
@@ -158,10 +158,10 @@ export async function actualizar(db, empresaId, id, p) {
   exigirEmpresa(empresaId);
   await db.query(
     `UPDATE promociones
-     SET nombre = $3, modo = $4, valor = $5, precio_combo = $6, aplica_a = $7, desde = $8::date, hasta = $9::date,
-         dias = $10::text[], hora_desde = $11, hora_hasta = $12, actualizado_en = now()
+     SET nombre = $3, modo = $4, valor = $5, precio_combo = $6, lleva = $7, paga = $8, aplica_a = $9,
+         desde = $10::date, hasta = $11::date, dias = $12::text[], hora_desde = $13, hora_hasta = $14, actualizado_en = now()
      WHERE empresa_id = $1 AND id = $2 AND activo`,
-    [empresaId, id, p.nombre, p.modo, p.valor, p.precioCombo, p.aplicaA, p.desde, p.hasta, p.dias, p.horaDesde, p.horaHasta]
+    [empresaId, id, p.nombre, p.modo, p.valor, p.precioCombo, p.lleva, p.paga, p.aplicaA, p.desde, p.hasta, p.dias, p.horaDesde, p.horaHasta]
   );
 }
 
@@ -216,7 +216,7 @@ export async function darDeBaja(db, empresaId, id, motivo, autor) {
 export async function cargarParaVenta(db, empresaId, sucursalId) {
   exigirEmpresa(empresaId);
   const r = await db.query(
-    `SELECT p.id, p.nombre, p.tipo, p.modo, p.valor, p.precio_combo, p.aplica_a,
+    `SELECT p.id, p.nombre, p.tipo, p.modo, p.valor, p.precio_combo, p.lleva, p.paga, p.aplica_a,
             to_char(p.desde, 'YYYY-MM-DD') AS desde, to_char(p.hasta, 'YYYY-MM-DD') AS hasta,
             p.dias, p.hora_desde, p.hora_hasta, p.encendida,
             (SELECT COALESCE(json_agg(json_build_object(
@@ -241,6 +241,8 @@ export async function cargarParaVenta(db, empresaId, sucursalId) {
     modo: f.modo,
     valor: f.valor === null ? null : Number(f.valor),
     precioCombo: f.precio_combo === null ? null : Number(f.precio_combo),
+    lleva: f.lleva === null ? null : Number(f.lleva),
+    paga: f.paga === null ? null : Number(f.paga),
     aplicaA: f.aplica_a,
     desde: f.desde,
     hasta: f.hasta,

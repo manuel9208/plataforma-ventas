@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { ETIQUETA_FORMA } from '../../utils/formasPago.js';
 import { formatearFechaHora, formatearFechaLarga, formatearMoneda } from '../../utils/formato.js';
 import Boton from '../shared/Boton.jsx';
+import { agruparServicios } from './agruparServicios.js';
 
 const ESTADO_PAGO = { pendiente: 'Sin pago', abonada: 'Abonada', pagada: 'Pagada' };
 
@@ -42,27 +43,33 @@ export default function TicketVenta({ venta, onNueva, esCopia = false, onVolver 
 
         {esNota && (
           <div className="mt-5 space-y-3">
-            {venta.servicios.map((s) => {
-              const datos = Object.values(s.articulo).join(' · ');
+            {agruparServicios(venta.servicios).map((g) => {
+              const datos = Object.values(g.articulo).join(' · ');
               return (
-                <div key={s.partidaId} className="rounded-2xl bg-[#faf8f3] border border-[var(--c-borde)] p-3 text-sm">
-                  <div className="flex justify-between gap-3">
-                    <p className="font-medium">{s.nombre}</p>
-                    <span className="font-medium shrink-0">{dinero(s.total)}</span>
+                <div key={g.id} className="rounded-2xl bg-[#faf8f3] border border-[var(--c-borde)] p-3 text-sm">
+                  {datos && <p className="font-semibold">{datos}</p>}
+                  <div className={`space-y-2 ${datos ? 'mt-2' : ''}`}>
+                    {g.servicios.map((s) => (
+                      <div key={s.partidaId}>
+                        <div className="flex justify-between gap-3">
+                          <p className="font-medium">{s.nombre}</p>
+                          <span className="font-medium shrink-0">{dinero(s.total)}</span>
+                        </div>
+                        {s.promocion && (
+                          <p className="text-xs font-medium text-emerald-700 mt-0.5">
+                            {s.promocion} · ahorro {dinero(s.descuento)}
+                          </p>
+                        )}
+                        {s.extras.map((x, i) => (
+                          <div key={i} className="flex justify-between text-xs text-neutral-500 mt-0.5">
+                            <span>+ {x.nombre}</span>
+                            <span>{dinero(x.total)}</span>
+                          </div>
+                        ))}
+                        <p className="text-xs text-[var(--c-primario)] font-medium mt-0.5">Entrega: {formatearFechaLarga(s.fechaPrometida)}</p>
+                      </div>
+                    ))}
                   </div>
-                  {datos && <p className="text-xs text-neutral-500 mt-0.5">{datos}</p>}
-                  {s.promocion && (
-                    <p className="text-xs font-medium text-emerald-700 mt-0.5">
-                      {s.promocion} · ahorro {dinero(s.descuento)}
-                    </p>
-                  )}
-                  {s.extras.map((x, i) => (
-                    <div key={i} className="flex justify-between text-xs text-neutral-500 mt-0.5">
-                      <span>+ {x.nombre}</span>
-                      <span>{dinero(x.total)}</span>
-                    </div>
-                  ))}
-                  <p className="text-xs text-[var(--c-primario)] font-medium mt-1">Entrega: {formatearFechaLarga(s.fechaPrometida)}</p>
                 </div>
               );
             })}

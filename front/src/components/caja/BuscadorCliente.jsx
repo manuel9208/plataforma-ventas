@@ -7,10 +7,11 @@ const soloDigitos = (v) => v.replace(/\D/g, '').slice(0, 10);
 
 // Dos campos, teléfono y nombre: al escribir en cualquiera busca clientes.
 // onCambio recibe { clienteId } si eligió uno, { clienteNuevo } si escribió ambos datos, o null.
-export default function BuscadorCliente({ onCambio }) {
-  const [telefono, setTelefono] = useState('');
-  const [nombre, setNombre] = useState('');
-  const [elegido, setElegido] = useState(null);
+// inicial: { id?, nombre, telefono } para abrir con un cliente ya capturado
+export default function BuscadorCliente({ onCambio, inicial = null }) {
+  const [telefono, setTelefono] = useState(inicial?.telefono ?? '');
+  const [nombre, setNombre] = useState(inicial?.nombre ?? '');
+  const [elegido, setElegido] = useState(inicial?.id ? { id: inicial.id, nombre: inicial.nombre, telefono: inicial.telefono } : null);
   const [resultados, setResultados] = useState([]);
 
   const buscando = !elegido && (telefono.length >= 3 || nombre.trim().length >= 2);
@@ -37,10 +38,12 @@ export default function BuscadorCliente({ onCambio }) {
     };
   }, [telefono, nombre, buscando]);
 
+  // onCambio(envio, vista): envio va al servidor; vista es para mostrar al cajero
   const avisar = (tel, nom, cliente) => {
-    if (cliente) onCambio({ clienteId: cliente.id });
-    else if (tel.length === 10 && nom.trim().length >= 2) onCambio({ clienteNuevo: { nombre: nom.trim(), telefono: tel } });
-    else onCambio(null);
+    if (cliente) onCambio({ clienteId: cliente.id }, { id: cliente.id, nombre: cliente.nombre, telefono: cliente.telefono });
+    else if (tel.length === 10 && nom.trim().length >= 2)
+      onCambio({ clienteNuevo: { nombre: nom.trim(), telefono: tel } }, { nombre: nom.trim(), telefono: tel });
+    else onCambio(null, null);
   };
 
   const elegir = (c) => {
@@ -56,7 +59,7 @@ export default function BuscadorCliente({ onCambio }) {
     setTelefono('');
     setNombre('');
     setResultados([]);
-    onCambio(null);
+    onCambio(null, null);
   };
 
   const escribir = (tel, nom) => {

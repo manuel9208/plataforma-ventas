@@ -21,6 +21,7 @@ import ComprobanteAjuste from './ComprobanteAjuste.jsx';
 import TicketVenta from './TicketVenta.jsx';
 import { notaATicket } from './notaATicket.js';
 import { useDetalleNota } from './useDetalleNota.js';
+import { agruparServicios } from './agruparServicios.js';
 
 const PENDIENTE = ['recibido', 'en_proceso'];
 const HECHO = ['listo', 'entregado'];
@@ -207,52 +208,61 @@ export default function DetalleNota({ id, accionInicial, onVolver, onOperando })
           <div className="rounded-3xl bg-white border border-[var(--c-borde)] p-5">
             <h3 className="font-semibold tracking-tight mb-3">Artículos</h3>
             <div className="space-y-3">
-              {nota.servicios.map((s) => {
-                const datos = Object.values(s.articulo).join(' · ');
-                const cambioFecha = s.fechaPrometidaOriginal && s.fechaPrometidaOriginal !== s.fechaPrometida;
-                const cancelado = s.estado === 'cancelado';
+              {agruparServicios(nota.servicios).map((g) => {
+                const datos = Object.values(g.articulo).join(' · ');
                 return (
-                  <div key={s.partidaId} className={`rounded-2xl bg-[#faf8f3] border border-[var(--c-borde)] p-4 ${cancelado ? 'opacity-60' : ''}`}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className={`font-medium ${cancelado ? 'line-through' : ''}`}>{s.nombre}</p>
-                        {datos && <p className="text-xs text-neutral-500 mt-0.5">{datos}</p>}
-                        {s.extras.map((x, i) => (
-                          <p key={i} className="text-xs text-neutral-500 mt-0.5">
-                            + {x.nombre} · {dinero(x.total)}
-                          </p>
-                        ))}
-                      </div>
-                      <EtiquetaEstado estado={s.estado} />
-                    </div>
-                    {!cancelado && (
-                      <p className="text-xs text-[var(--c-primario)] font-medium mt-2">
-                        Entrega: {formatearFechaLarga(s.fechaPrometida)}
-                        {cambioFecha ? ` (antes ${formatearFechaLarga(s.fechaPrometidaOriginal)})` : ''}
-                      </p>
-                    )}
-                    {s.estado === 'listo' && s.listoEn && (
-                      <p className="text-xs text-neutral-400 mt-0.5">Listo desde {formatearFechaHora(s.listoEn, nota.zonaHoraria)}</p>
-                    )}
-                    <div className="flex items-center justify-between gap-3 mt-3">
-                      <span className={`font-semibold ${cancelado ? 'line-through' : ''}`}>{dinero(s.total)}</span>
-                      {PENDIENTE.includes(s.estado) && (
-                        <Boton compacto onClick={() => setAListo([s.partidaId])}>
-                          Marcar listo
-                        </Boton>
-                      )}
-                      {s.estado === 'listo' && nota.puedeGestionar && (
-                        <Boton
-                          compacto
-                          variante="secundario"
-                          onClick={() => {
-                            setErrorAccion('');
-                            setAEspera(s.partidaId);
-                          }}
-                        >
-                          Regresar a En espera
-                        </Boton>
-                      )}
+                  <div key={g.id} className="rounded-2xl bg-[#faf8f3] border border-[var(--c-borde)] p-4">
+                    {datos && <p className="font-semibold">{datos}</p>}
+                    {g.comentario && <p className="text-xs text-neutral-500 italic mt-0.5">Nota interna: {g.comentario}</p>}
+                    <div className={`space-y-3 ${datos || g.comentario ? 'mt-3' : ''}`}>
+                      {g.servicios.map((s) => {
+                        const cambioFecha = s.fechaPrometidaOriginal && s.fechaPrometidaOriginal !== s.fechaPrometida;
+                        const cancelado = s.estado === 'cancelado';
+                        return (
+                          <div key={s.partidaId} className={`rounded-xl bg-white border border-[var(--c-borde)] p-3 ${cancelado ? 'opacity-60' : ''}`}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className={`font-medium ${cancelado ? 'line-through' : ''}`}>{s.nombre}</p>
+                                {s.extras.map((x, i) => (
+                                  <p key={i} className="text-xs text-neutral-500 mt-0.5">
+                                    + {x.nombre} · {dinero(x.total)}
+                                  </p>
+                                ))}
+                              </div>
+                              <EtiquetaEstado estado={s.estado} />
+                            </div>
+                            {!cancelado && (
+                              <p className="text-xs text-[var(--c-primario)] font-medium mt-2">
+                                Entrega: {formatearFechaLarga(s.fechaPrometida)}
+                                {cambioFecha ? ` (antes ${formatearFechaLarga(s.fechaPrometidaOriginal)})` : ''}
+                              </p>
+                            )}
+                            {s.estado === 'listo' && s.listoEn && (
+                              <p className="text-xs text-neutral-400 mt-0.5">Listo desde {formatearFechaHora(s.listoEn, nota.zonaHoraria)}</p>
+                            )}
+                            <div className="flex items-center justify-between gap-3 mt-3">
+                              <span className={`font-semibold ${cancelado ? 'line-through' : ''}`}>{dinero(s.total)}</span>
+                              {PENDIENTE.includes(s.estado) && (
+                                <Boton compacto onClick={() => setAListo([s.partidaId])}>
+                                  Marcar listo
+                                </Boton>
+                              )}
+                              {s.estado === 'listo' && nota.puedeGestionar && (
+                                <Boton
+                                  compacto
+                                  variante="secundario"
+                                  onClick={() => {
+                                    setErrorAccion('');
+                                    setAEspera(s.partidaId);
+                                  }}
+                                >
+                                  Regresar a En espera
+                                </Boton>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );

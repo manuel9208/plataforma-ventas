@@ -44,3 +44,12 @@ export const actualizarBody = z
     activo: z.boolean().optional(),
   })
   .strict();
+
+  export const articuloParams = z.object({
+  id: z.string().uuid('Cliente inválido'),
+  articuloId: z.string().uuid('Artículo inválido'),
+});
+
+export const bajaArticuloBody = z
+  .object({ motivo: z.string().trim().min(3, 'Escribe el motivo').max(200) })
+  .strict();

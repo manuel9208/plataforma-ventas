@@ -20,7 +20,7 @@ const filaNueva = (forma = 'efectivo', monto = '') => ({ _k: `p${++contador}`, f
 const redondear = (n) => Number(Number(n).toFixed(2));
 
 // total: lo que cuesta todo. totalServicios: la parte que acepta abono. config: abono de la sucursal.
-export default function ModalCobro({ total, totalProductos = 0, totalServicios = 0, config, enviando, error, onConfirmar, onCerrar }) {
+export default function ModalCobro({ total, totalProductos = 0, totalServicios = 0, config, clienteInicial = null, enviando, error, onConfirmar, onCerrar }) {
   const { empresa } = useAuth();
   const dinero = (v) => formatearMoneda(v, empresa.moneda);
   const esNota = totalServicios > 0;
@@ -35,7 +35,7 @@ export default function ModalCobro({ total, totalProductos = 0, totalServicios =
   const [recibido, setRecibido] = useState('');
   const [referencia, setReferencia] = useState('');
   const [filas, setFilas] = useState(() => [filaNueva('efectivo'), filaNueva('tarjeta')]);
-  const [cliente, setCliente] = useState(null);
+  const [cliente, setCliente] = useState(clienteInicial?.envio ?? null);
 
   const montoNota = esNota ? Number(aCobrar || 0) : total;
 
@@ -286,7 +286,7 @@ export default function ModalCobro({ total, totalProductos = 0, totalServicios =
             {esNota ? 'Cliente *' : 'Cliente (opcional)'}
           </summary>
           <div className="mt-3">
-            <BuscadorCliente onCambio={setCliente} />
+            <BuscadorCliente inicial={clienteInicial?.vista} onCambio={(envio) => setCliente(envio)} />
             {faltaCliente && <p className="mt-2 text-xs text-amber-700">Escribe el teléfono y el nombre del cliente.</p>}
           </div>
         </details>

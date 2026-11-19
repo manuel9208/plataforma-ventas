@@ -51,6 +51,8 @@ const resumen = (d) => ({
   modo: d.modo,
   valor: d.valor,
   precioCombo: d.precioCombo,
+  lleva: d.lleva,
+  paga: d.paga,
   aplicaA: d.aplicaA,
   objetivos: d.objetivos.length,
   articulosCombo: d.items.length,

@@ -22,10 +22,12 @@ export const buscarQuery = z.object({
 export const promocionBody = z
   .object({
     nombre: z.string().trim().min(2, 'Escribe el nombre').max(60),
-    tipo: z.enum(['descuento', 'happy_hour', 'combo']),
+    tipo: z.enum(['descuento', 'happy_hour', 'combo', 'lleva_paga']),
     modo: z.enum(['porcentaje', 'monto']).nullish(),
     valor: importe.nullish(),
     precioCombo: importe.nullish(),
+    lleva: z.number().int().min(2).max(10).nullish(),
+    paga: z.number().positive().max(9.99).nullish(),
     aplicaA: z.enum(['todo', 'seleccion']).default('todo'),
     objetivos: z.array(z.object({ tipo: z.enum(['departamento', 'producto', 'servicio']), id: idNumero }).strict()).max(100).default([]),
     items: z

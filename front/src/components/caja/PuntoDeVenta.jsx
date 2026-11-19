@@ -8,7 +8,7 @@ import MensajeError from '../shared/MensajeError.jsx';
 import Icono from '../shared/Icono.jsx';
 import { useCatalogoCaja } from './useCatalogoCaja.js';
 import { useCatalogoServicios } from './useCatalogoServicios.js';
-import { useCarrito } from './useCarrito.js';
+import { useCarrito, MAX_SERVICIOS_ARTICULO, MAX_SERVICIOS_NOTA } from './useCarrito.js';
 import { usePromocionesCaja } from './usePromocionesCaja.js';
 import CatalogoCaja from './CatalogoCaja.jsx';
 import CatalogoServicios from './CatalogoServicios.jsx';
@@ -16,6 +16,11 @@ import Carrito from './Carrito.jsx';
 import ModalCobro from './ModalCobro.jsx';
 import ModalCantidad from './ModalCantidad.jsx';
 import ModalArticulo from './ModalArticulo.jsx';
+import ModalCliente from './ModalCliente.jsx';
+import ModalOtroServicio from './ModalOtroServicio.jsx';
+import ModalArticuloGuardado from './ModalArticuloGuardado.jsx';
+import BarraCliente from './BarraCliente.jsx';
+import SusArticulos from './SusArticulos.jsx';
 import ModalDescuento from './ModalDescuento.jsx';
 import TicketVenta from './TicketVenta.jsx';
 import { formatearMoneda } from '../../utils/formato.js';
@@ -35,7 +40,11 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
   const [codigo, setCodigo] = useState('');
   const [aviso, setAviso] = useState('');
   const [pidiendo, setPidiendo] = useState(null); // cantidad de granel
-  const [articulo, setArticulo] = useState(null); // { servicio, precio, edicion? }
+  // { modo: 'completo' | 'datos' | 'servicio', servicio?, precio?, grupo?, servicioEdit? }
+  const [editor, setEditor] = useState(null);
+  const [otro, setOtro] = useState(null); // grupo al que se le agrega otro servicio
+  const [eligiendoCliente, setEligiendoCliente] = useState(false);
+  const [guardado, setGuardado] = useState(null); // artículo guardado del cliente que se está revisando
   const [cobrando, setCobrando] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [errorCobro, setErrorCobro] = useState('');
@@ -104,13 +113,7 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
       const venta = await svc.crearVenta({
         id: idVenta.current,
         lineas: carrito.lineas.map((l) => ({ presentacionId: l.presentacion.id, cantidad: l.cantidad })),
-        servicios: carrito.notas.map((n) => ({
-          servicioId: n.servicio.id,
-          tipoArticuloId: n.precio.tipoArticuloId,
-          ...(n.fechaPrometida ? { fechaPrometida: n.fechaPrometida } : {}),
-          extraIds: n.extraIds,
-          articulo: Object.fromEntries(Object.entries(n.articulo).filter(([, v]) => v !== '')),
-        })),
+        articulos: carrito.articulosEnvio,
         pagos,
         totalMostrado: carrito.totales.total,
         ...(carrito.descuentoManual ? { descuentos: carrito.descuentoManual } : {}),
@@ -153,7 +156,10 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
     <Carrito
       carrito={carrito}
       incluyeIva={catalogo.incluyeIva}
-      onEditarArticulo={(n) => setArticulo({ servicio: n.servicio, precio: n.precio, edicion: n })}
+      onEditarDatos={(g) => setEditor({ modo: 'datos', grupo: g })}
+      onEditarServicio={(g, s) => setEditor({ modo: 'servicio', servicio: s.servicio, precio: s.precio, grupo: g, servicioEdit: s })}
+      onOtroServicio={setOtro}
+      onCliente={() => setEligiendoCliente(true)}
       descuento={{ disponible: promos.descuentoManualMax > 0 }}
       onDescuento={setDescontando}
       onCobrar={() => {
@@ -168,6 +174,7 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
     <>
       <div className="lg:grid lg:grid-cols-[1fr_24rem] lg:gap-6 items-start">
         <section>
+          {enServicios && <BarraCliente cliente={carrito.cliente} onAbrir={() => setEligiendoCliente(true)} />}
           <form onSubmit={buscarCodigo} className="mb-3 flex gap-2">
             <div className="relative flex-1">
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400">
@@ -209,8 +216,27 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
             </div>
           )}
 
+          {enServicios && carrito.cliente?.vista?.id && (
+            <SusArticulos
+              cliente={carrito.cliente.vista}
+              bloqueo={!config ? 'Cargando…' : carrito.motivoLimite}
+              onAgregar={(a) => {
+                setAviso('');
+                setGuardado(a);
+              }}
+            />
+          )}
+
           {enServicios ? (
-            <CatalogoServicios catalogo={servicios} onElegir={(servicio, precio) => config && setArticulo({ servicio, precio })} />
+            <CatalogoServicios
+              catalogo={servicios}
+              onElegir={(servicio, precio) => {
+                if (!config) return;
+                if (carrito.motivoLimite) return setAviso(carrito.motivoLimite);
+                setAviso('');
+                setEditor({ modo: 'completo', servicio, precio });
+              }}
+            />
           ) : (
             <CatalogoCaja catalogo={catalogo} onAgregar={carrito.agregar} />
           )}
@@ -229,7 +255,7 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
             onClick={() => setPanelAbierto(true)}
             className="w-full min-h-14 px-5 rounded-2xl text-white flex items-center justify-between bg-[linear-gradient(180deg,var(--c-primario-2),var(--c-primario))] shadow-[0_12px_30px_-10px_rgba(29,43,79,0.8)]"
           >
-            <span className="font-semibold">Ver {carrito.tieneServicios ? 'nota' : 'venta'} ({carrito.lineas.length + carrito.notas.length})</span>
+            <span className="font-semibold">Ver {carrito.tieneServicios ? 'nota' : 'venta'} ({carrito.lineas.length + carrito.grupos.length})</span>
             <span className="font-semibold">{formatearMoneda(carrito.totales.total, empresa.moneda)}</span>
           </button>
         </div>
@@ -245,6 +271,7 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
           totalProductos={carrito.totalProductos}
           totalServicios={carrito.totalServicios}
           config={config}
+          clienteInicial={carrito.cliente}
           enviando={enviando}
           error={errorCobro}
           onConfirmar={cobrar}
@@ -252,19 +279,67 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
         />
       )}
 
-      {articulo && config && (
+      {editor && config && (
         <ModalArticulo
-          key={articulo.edicion?.clave ?? 'nuevo'}
-          servicio={articulo.servicio}
-          precio={articulo.precio}
+          key={`${editor.modo}-${editor.servicioEdit?.clave ?? editor.grupo?.clave ?? 'nuevo'}`}
+          modo={editor.modo}
+          servicio={editor.servicio}
+          precio={editor.precio}
           config={config}
-          inicial={articulo.edicion}
-          onAceptar={(datos) => {
-            if (articulo.edicion) carrito.editarArticulo(articulo.edicion.clave, datos);
-            else carrito.agregarArticulo(articulo.servicio, articulo.precio, datos);
-            setArticulo(null);
+          inicialDatos={editor.grupo ? { datos: editor.grupo.datos, comentario: editor.grupo.comentario } : undefined}
+          inicialServicio={editor.servicioEdit}
+          onAceptar={(d) => {
+            const s = { servicio: editor.servicio, precio: editor.precio, extraIds: d.extraIds, fechaPrometida: d.fechaPrometida, fechaMostrada: d.fechaMostrada };
+            if (editor.modo === 'completo') carrito.agregarArticulo({ datos: d.datos, comentario: d.comentario }, s);
+            else if (editor.modo === 'datos') carrito.editarDatos(editor.grupo.clave, { datos: d.datos, comentario: d.comentario });
+            else if (editor.servicioEdit) carrito.editarServicio(editor.servicioEdit.clave, s);
+            else carrito.agregarServicio(editor.grupo.clave, s);
+            setEditor(null);
           }}
-          onCerrar={() => setArticulo(null)}
+          onCerrar={() => setEditor(null)}
+        />
+      )}
+
+      {guardado && config && (
+        <ModalArticuloGuardado
+          key={guardado.id}
+          articulo={guardado}
+          config={config}
+          catalogo={servicios}
+          maxServicios={Math.min(MAX_SERVICIOS_ARTICULO, MAX_SERVICIOS_NOTA - carrito.numServicios)}
+          onAceptar={(d) => {
+            carrito.agregarArticuloConServicios({ datos: d.datos, comentario: d.comentario }, d.servicios);
+            setGuardado(null);
+          }}
+          onCerrar={() => setGuardado(null)}
+        />
+      )}
+
+      {otro && (
+        <ModalOtroServicio
+          catalogo={servicios}
+          tipoArticuloId={otro.servicios[0].precio.tipoArticuloId}
+          tipoNombre={otro.servicios[0].precio.tipo}
+          onElegir={(servicio, precio) => {
+            setEditor({ modo: 'servicio', servicio, precio, grupo: otro });
+            setOtro(null);
+            servicios.setBuscar('');
+          }}
+          onCerrar={() => {
+            setOtro(null);
+            servicios.setBuscar('');
+          }}
+        />
+      )}
+
+      {eligiendoCliente && (
+        <ModalCliente
+          inicial={carrito.cliente}
+          onAceptar={(envio, vista) => {
+            carrito.ponerCliente(envio, vista);
+            setEligiendoCliente(false);
+          }}
+          onCerrar={() => setEligiendoCliente(false)}
         />
       )}
 

@@ -49,6 +49,25 @@ const servicioLinea = z
   })
   .strict();
 
+// Un servicio dentro de un artículo (los datos del artículo van una sola vez, arriba)
+const servicioDeArticulo = z
+  .object({
+    servicioId: idNumero,
+    tipoArticuloId: idNumero,
+    fechaPrometida: z.string().refine(esFechaISO, 'Fecha inválida').optional(),
+    extraIds: z.array(idNumero).max(20).default([]),
+  })
+  .strict();
+
+// Un artículo físico (unos tenis) con uno o varios servicios y un comentario interno
+const articuloNota = z
+  .object({
+    datos: articulo,
+    comentario: z.string().trim().max(300).optional(),
+    servicios: z.array(servicioDeArticulo).min(1, 'Agrega al menos un servicio al artículo').max(10),
+  })
+  .strict();
+
 const pago = z
   .object({
     forma: z.enum(FORMAS_PAGO),
@@ -81,6 +100,7 @@ export const crearVentaBody = z
     id: z.string().uuid('Venta inválida'),
     lineas: z.array(linea).max(100).default([]),
     servicios: z.array(servicioLinea).max(50).default([]),
+    articulos: z.array(articuloNota).max(25).default([]),
     // En una nota con servicios los pagos pueden venir vacíos (abono de $0)
     pagos: z.array(pago).max(6).default([]),
     descuentos: descuentosManuales.optional(),
@@ -90,5 +110,6 @@ export const crearVentaBody = z
     clienteNuevo: z.object({ nombre: z.string().trim().min(2).max(80).transform(nombrePropio), telefono }).strict().optional(),
   })
   .strict()
-  .refine((d) => d.lineas.length + d.servicios.length > 0, { message: 'El carrito está vacío' })
+  .refine((d) => d.lineas.length + d.servicios.length + d.articulos.length > 0, { message: 'El carrito está vacío' })
+  .refine((d) => !(d.servicios.length && d.articulos.length), { message: 'Manda los servicios sueltos o por artículo, no ambos' })
   .refine((d) => !(d.clienteId && d.clienteNuevo), { message: 'Indica un cliente existente o uno nuevo, no ambos' });

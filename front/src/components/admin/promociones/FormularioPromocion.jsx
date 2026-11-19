@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { DIAS, TIPOS_PROMOCION, validarPromocion } from '@plataforma/calculos';
+import { DIAS, TIPOS_PROMOCION, nombreLlevaPaga, textoPromocion, validarPromocion } from '@plataforma/calculos';
 import { textoError } from '../../../utils/textoError.js';
 import Modal from '../../shared/Modal.jsx';
 import Boton from '../../shared/Boton.jsx';
 import Campo from '../../shared/Campo.jsx';
+import Selector from '../../shared/Selector.jsx';
 import Segmentos from '../../shared/Segmentos.jsx';
 import Plegable from '../../shared/Plegable.jsx';
 import MensajeError from '../../shared/MensajeError.jsx';
@@ -13,6 +14,7 @@ import SelectorArticulosCombo from './SelectorArticulosCombo.jsx';
 const numero = (s) => (s === '' ? null : Number(s));
 const PLACEHOLDER = { descuento: 'Ejemplo: 10% en limpieza', happy_hour: 'Ejemplo: Martes de bolsas', combo: 'Ejemplo: Tenis + gorra' };
 const BOTON_ACTIVO = 'text-white bg-[linear-gradient(180deg,var(--c-primario-2),var(--c-primario))]';
+const OPCIONES_LLEVA = Array.from({ length: 9 }, (_, i) => i + 2);
 
 // d = promoción tal como la manda el servidor (o null si es nueva)
 function estadoInicial(d, opciones) {
@@ -22,6 +24,8 @@ function estadoInicial(d, opciones) {
     modo: d?.modo ?? 'porcentaje',
     valor: d?.valor == null ? '' : String(d.valor),
     precioCombo: d?.precioCombo == null ? '' : String(d.precioCombo),
+    lleva: d?.lleva == null ? '2' : String(d.lleva),
+    paga: d?.paga == null ? '1' : String(d.paga),
     aplicaA: d?.aplicaA ?? 'todo',
     objetivos: d?.objetivos ?? [],
     items: d?.items ?? [],
@@ -38,12 +42,19 @@ function estadoInicial(d, opciones) {
 
 function aDatos(f) {
   const combo = f.tipo === 'combo';
+  const llevaPaga = f.tipo === 'lleva_paga';
+  const descuento = f.tipo === 'descuento' || f.tipo === 'happy_hour';
+  const lleva = llevaPaga ? Number(f.lleva) : null;
+  const paga = llevaPaga ? numero(f.paga) : null;
   return {
-    nombre: f.nombre,
+    // En "lleva y paga" el nombre es opcional: si va vacío se llama 2x1, 3x2, 3x1.5...
+    nombre: f.nombre.trim() || (llevaPaga && paga ? nombreLlevaPaga(lleva, paga) : ''),
     tipo: f.tipo,
-    modo: combo ? null : f.modo,
-    valor: combo ? null : numero(f.valor),
+    modo: descuento ? f.modo : null,
+    valor: descuento ? numero(f.valor) : null,
     precioCombo: combo ? numero(f.precioCombo) : null,
+    lleva,
+    paga,
     aplicaA: f.aplicaA,
     objetivos: f.objetivos,
     items: f.items,
@@ -101,6 +112,10 @@ export default function FormularioPromocion({ inicial, opciones, onGuardar, onCe
 
   const tipo = TIPOS_PROMOCION.find((t) => t.id === f.tipo);
   const combo = f.tipo === 'combo';
+  const llevaPaga = f.tipo === 'lleva_paga';
+  const esDescuento = f.tipo === 'descuento' || f.tipo === 'happy_hour';
+  const pagaNumero = numero(f.paga);
+  const nombreAuto = llevaPaga && pagaNumero ? nombreLlevaPaga(Number(f.lleva), pagaNumero) : '';
 
   const guardar = async () => {
     if (f.algunas && f.sucursalIds.length === 0) {
@@ -142,9 +157,48 @@ export default function FormularioPromocion({ inicial, opciones, onGuardar, onCe
       }
     >
       <div className="space-y-5">
-        <Campo etiqueta="Nombre *" value={f.nombre} maxLength={60} placeholder={PLACEHOLDER[f.tipo]} onChange={(e) => poner('nombre', e.target.value)} ayuda="Lo verás tú y el cajero." />
+        <Campo
+          etiqueta={llevaPaga ? 'Nombre (opcional)' : 'Nombre *'}
+          value={f.nombre}
+          maxLength={60}
+          placeholder={llevaPaga ? nombreAuto || 'Se llena solo' : PLACEHOLDER[f.tipo]}
+          onChange={(e) => poner('nombre', e.target.value)}
+          ayuda={llevaPaga ? `Si lo dejas vacío se llamará ${nombreAuto || '2x1'}. Dos promociones activas no pueden llamarse igual.` : 'Lo verás tú y el cajero.'}
+        />
 
-        {!combo && (
+        {llevaPaga && (
+          <div className="space-y-3 rounded-2xl border border-[var(--c-borde)] p-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Selector etiqueta="El cliente lleva" value={f.lleva} onChange={(e) => poner('lleva', e.target.value)}>
+                {OPCIONES_LLEVA.map((n) => (
+                  <option key={n} value={n}>
+                    {n} piezas
+                  </option>
+                ))}
+              </Selector>
+              <Campo
+                etiqueta="Y paga"
+                type="number"
+                inputMode="decimal"
+                step="0.5"
+                min="0.5"
+                value={f.paga}
+                onChange={(e) => poner('paga', e.target.value)}
+              />
+            </div>
+            {pagaNumero > 0 && (
+              <p className="text-sm font-semibold text-neutral-700">
+                {textoPromocion({ tipo: 'lleva_paga', lleva: Number(f.lleva), paga: pagaNumero })}
+              </p>
+            )}
+            <p className="text-xs text-neutral-500">
+              Paga lo más caro y se lleva gratis lo más barato. Con decimales, por ejemplo 1.5, una pieza sale completa y otra a mitad de precio.
+              Cada servicio cuenta como una pieza.
+            </p>
+          </div>
+        )}
+
+        {esDescuento && (
           <>
             <div>
               <p className="text-sm font-medium text-neutral-600 mb-1.5">¿Cuánto descuentas?</p>
@@ -213,7 +267,11 @@ export default function FormularioPromocion({ inicial, opciones, onGuardar, onCe
                 valor={f.aplicaA}
                 onCambio={(v) => poner('aplicaA', v)}
               />
-              <p className="text-xs text-neutral-500 mt-1.5">Los extras de los servicios no llevan descuento.</p>
+              <p className="text-xs text-neutral-500 mt-1.5">
+                {llevaPaga
+                  ? 'Los extras de los servicios y lo que se vende por peso o medida no entran.'
+                  : 'Los extras de los servicios no llevan descuento.'}
+              </p>
             </div>
             {f.aplicaA === 'seleccion' && <SelectorObjetivos opciones={opciones} valor={f.objetivos} onCambio={(v) => poner('objetivos', v)} />}
           </>

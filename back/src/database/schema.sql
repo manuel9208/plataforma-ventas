@@ -1319,3 +1319,65 @@ ALTER TABLE empresa_config
 ADD COLUMN IF NOT EXISTS descuento_manual_max NUMERIC(5,2) NOT NULL DEFAULT 20 CHECK (descuento_manual_max >= 0 AND descuento_manual_max <= 99);
 ALTER TABLE sucursal_config
 ADD COLUMN IF NOT EXISTS descuento_manual_max NUMERIC(5,2) CHECK (descuento_manual_max >= 0 AND descuento_manual_max <= 99);
+
+-- ============ BLOQUE 30: PROMOCIONES "LLEVA Y PAGA" (2x1, 3x2, 3 pagando 1.5) ============
+ALTER TABLE promociones ADD COLUMN IF NOT EXISTS lleva INTEGER CHECK (lleva BETWEEN 2 AND 10);
+ALTER TABLE promociones ADD COLUMN IF NOT EXISTS paga NUMERIC(4,2) CHECK (paga > 0);
+ALTER TABLE promociones
+  DROP CONSTRAINT IF EXISTS promociones_tipo_check,
+  DROP CONSTRAINT IF EXISTS promociones_check1,
+  DROP CONSTRAINT IF EXISTS promociones_tipo_valido,
+  DROP CONSTRAINT IF EXISTS promociones_forma_valida,
+  ADD CONSTRAINT promociones_tipo_valido CHECK (tipo IN ('descuento', 'happy_hour', 'combo', 'lleva_paga')),
+  ADD CONSTRAINT promociones_forma_valida CHECK (
+    (tipo = 'combo' AND precio_combo IS NOT NULL AND modo IS NULL AND valor IS NULL AND lleva IS NULL AND paga IS NULL)
+    OR (tipo = 'lleva_paga' AND lleva IS NOT NULL AND paga IS NOT NULL AND paga < lleva AND modo IS NULL AND valor IS NULL AND precio_combo IS NULL)
+    OR (tipo IN ('descuento', 'happy_hour') AND modo IS NOT NULL AND valor IS NOT NULL AND precio_combo IS NULL AND lleva IS NULL AND paga IS NULL)
+  );
+
+  -- ============ BLOQUE 31: ARTICULOS DE LA NOTA (UN ARTICULO, VARIOS SERVICIOS) ============
+CREATE TABLE IF NOT EXISTS venta_articulos (
+id UUID NOT NULL DEFAULT gen_random_uuid(),
+empresa_id BIGINT NOT NULL REFERENCES empresas(id),
+venta_id UUID NOT NULL,
+orden INTEGER NOT NULL CHECK (orden > 0),
+comentario TEXT CHECK (char_length(comentario) <= 300),
+creado_en TIMESTAMPTZ NOT NULL DEFAULT now(),
+PRIMARY KEY (id),
+UNIQUE (id, empresa_id),
+UNIQUE (venta_id, orden),
+FOREIGN KEY (venta_id, empresa_id) REFERENCES ventas(id, empresa_id)
+);
+CREATE INDEX IF NOT EXISTS idx_venta_articulos_venta ON venta_articulos (empresa_id, venta_id);
+ALTER TABLE partida_servicio ADD COLUMN IF NOT EXISTS venta_articulo_id UUID REFERENCES venta_articulos(id);
+CREATE INDEX IF NOT EXISTS idx_partida_servicio_articulo ON partida_servicio (venta_articulo_id);
+
+-- ============ BLOQUE 32: ARTICULOS GUARDADOS DEL CLIENTE ============
+CREATE TABLE IF NOT EXISTS cliente_articulos (
+id UUID NOT NULL DEFAULT gen_random_uuid(),
+empresa_id BIGINT NOT NULL REFERENCES empresas(id),
+cliente_id UUID NOT NULL,
+clave TEXT NOT NULL,
+marca TEXT NOT NULL DEFAULT '',
+talla TEXT NOT NULL DEFAULT '',
+color TEXT NOT NULL DEFAULT '',
+modelo TEXT NOT NULL DEFAULT '',
+textura TEXT NOT NULL DEFAULT '',
+descripcion TEXT NOT NULL DEFAULT '',
+ultimos_servicios JSONB NOT NULL DEFAULT '[]'::jsonb,
+veces INTEGER NOT NULL DEFAULT 1 CHECK (veces > 0),
+ultima_vez TIMESTAMPTZ NOT NULL DEFAULT now(),
+activo BOOLEAN NOT NULL DEFAULT TRUE,
+baja_motivo TEXT,
+baja_en TIMESTAMPTZ,
+baja_por BIGINT,
+creado_en TIMESTAMPTZ NOT NULL DEFAULT now(),
+actualizado_en TIMESTAMPTZ NOT NULL DEFAULT now(),
+PRIMARY KEY (id),
+UNIQUE (id, empresa_id),
+FOREIGN KEY (cliente_id, empresa_id) REFERENCES clientes(id, empresa_id),
+FOREIGN KEY (baja_por, empresa_id) REFERENCES usuarios(id, empresa_id),
+CHECK (activo OR baja_motivo IS NOT NULL)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cliente_articulos_clave ON cliente_articulos (empresa_id, cliente_id, clave) WHERE activo;
+CREATE INDEX IF NOT EXISTS idx_cliente_articulos_cliente ON cliente_articulos (empresa_id, cliente_id, ultima_vez DESC);

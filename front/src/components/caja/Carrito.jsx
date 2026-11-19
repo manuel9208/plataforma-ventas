@@ -1,9 +1,10 @@
 import { permiteDecimales } from '@plataforma/calculos';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { formatearFechaLarga, formatearMoneda } from '../../utils/formato.js';
+import { formatearFechaLarga, formatearMoneda, formatearTelefono } from '../../utils/formato.js';
 import Boton from '../shared/Boton.jsx';
 
-// descuento: { disponible } · onDescuento({ clave, nombre }) abre el descuento manual; { clave: null } solo pide la autorización
+const BOTON = 'min-h-9 px-3 rounded-lg border border-[var(--c-borde)] text-sm disabled:opacity-40';
+
 function BotonDescuento({ pct, onAbrir, onQuitar }) {
   return pct ? (
     <span className="inline-flex items-center gap-1 pl-3 pr-1 min-h-9 rounded-lg bg-amber-50 text-amber-800 text-xs font-semibold">
@@ -13,16 +14,28 @@ function BotonDescuento({ pct, onAbrir, onQuitar }) {
       </button>
     </span>
   ) : (
-    <button type="button" onClick={onAbrir} className="min-h-9 px-3 rounded-lg border border-[var(--c-borde)] text-sm">
+    <button type="button" onClick={onAbrir} className={BOTON}>
       Descuento
     </button>
   );
 }
 
-export default function Carrito({ carrito, incluyeIva, descuento, onCobrar, onVaciar, onEditarArticulo, onDescuento }) {
+// onEditarDatos(grupo) · onEditarServicio(grupo, servicio) · onOtroServicio(grupo) · onCliente() · onDescuento({ clave, nombre })
+export default function Carrito({
+  carrito,
+  incluyeIva,
+  descuento,
+  onCobrar,
+  onVaciar,
+  onEditarDatos,
+  onEditarServicio,
+  onOtroServicio,
+  onCliente,
+  onDescuento,
+}) {
   const { empresa } = useAuth();
   const dinero = (v) => formatearMoneda(v, empresa.moneda);
-  const { lineas, notas, totales } = carrito;
+  const { lineas, grupos, totales } = carrito;
 
   return (
     <div className="flex flex-col h-full">
@@ -35,80 +48,127 @@ export default function Carrito({ carrito, incluyeIva, descuento, onCobrar, onVa
         )}
       </div>
 
+      {carrito.tieneServicios && (
+        <button
+          type="button"
+          onClick={onCliente}
+          className="mb-3 w-full text-left rounded-2xl border border-[var(--c-borde)] bg-white px-4 py-3 min-h-12 hover:border-[var(--c-acento)]"
+        >
+          {carrito.cliente ? (
+            <span className="flex items-center justify-between gap-3">
+              <span className="min-w-0">
+                <span className="block font-medium truncate">{carrito.cliente.vista.nombre}</span>
+                <span className="block text-xs text-neutral-500">{formatearTelefono(carrito.cliente.vista.telefono)}</span>
+              </span>
+              <span className="text-sm font-medium text-[var(--c-primario)]">Cambiar</span>
+            </span>
+          ) : (
+            <span className="text-sm text-neutral-500">+ Agregar cliente (también se pide al cobrar)</span>
+          )}
+        </button>
+      )}
+
       {carrito.vacio ? (
         <p className="flex-1 grid place-items-center text-center text-neutral-400 py-10">
           Escanea un producto o toca uno del catálogo.
         </p>
       ) : (
         <ul className="flex-1 overflow-y-auto space-y-3 pr-1">
-          {notas.map((n) => {
-            const datos = Object.values(n.articulo).filter(Boolean).join(' · ');
+          {grupos.map((g) => {
+            const datos = Object.values(g.datos).filter(Boolean).join(' · ');
+            const motivoOtro = carrito.motivoServicio(g.clave);
+            const motivoDup = carrito.motivoDuplicar(g.clave);
             return (
-              <li key={n.clave} className="rounded-2xl border border-[var(--c-borde)] bg-white p-3">
+              <li key={g.clave} className="rounded-2xl border border-[var(--c-borde)] bg-white p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-medium truncate">
-                      {n.servicio.nombre} · {n.precio.tipo}
-                    </p>
-                    <p className="text-xs text-neutral-500 truncate">{datos}</p>
-                    <p className="text-xs text-neutral-400">Entrega: {formatearFechaLarga(n.fechaMostrada)}</p>
+                    <p className="font-semibold truncate">{datos || 'Artículo'}</p>
+                    {g.comentario && <p className="text-xs text-neutral-500 italic truncate">Nota interna: {g.comentario}</p>}
                   </div>
                   <button
                     type="button"
-                    aria-label="Quitar"
-                    onClick={() => carrito.quitarArticulo(n.clave)}
+                    aria-label="Quitar artículo"
+                    onClick={() => carrito.quitarArticulo(g.clave)}
                     className="size-8 shrink-0 rounded-full bg-[#f3efe6] text-neutral-500"
                   >
                     ✕
                   </button>
                 </div>
 
-                {n.extras.length > 0 && (
-                  <ul className="mt-2 space-y-0.5 text-xs text-neutral-500">
-                    {n.extras.map((x) => (
-                      <li key={x.id} className="flex justify-between">
-                        <span>+ {x.nombre}</span>
-                        <span>{dinero(x.total)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <ul className="mt-3 space-y-2">
+                  {g.servicios.map((s) => (
+                    <li key={s.clave} className="rounded-xl bg-[#faf8f3] border border-[var(--c-borde)] p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">
+                            {s.servicio.nombre} · {s.precio.tipo}
+                          </p>
+                          <p className="text-xs text-neutral-400">Entrega: {formatearFechaLarga(s.fechaMostrada)}</p>
+                        </div>
+                        <button
+                          type="button"
+                          aria-label="Quitar servicio"
+                          onClick={() => carrito.quitarServicio(s.clave)}
+                          className="size-7 shrink-0 rounded-full bg-white text-neutral-500 text-sm"
+                        >
+                          ✕
+                        </button>
+                      </div>
 
-                {n.promocion && (
-                  <p className="mt-2 text-xs font-medium text-emerald-700">
-                    {n.promocion} · −{dinero(n.descuento)}
-                  </p>
-                )}
+                      {s.extras.length > 0 && (
+                        <ul className="mt-1.5 space-y-0.5 text-xs text-neutral-500">
+                          {s.extras.map((x) => (
+                            <li key={x.id} className="flex justify-between">
+                              <span>+ {x.nombre}</span>
+                              <span>{dinero(x.total)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
 
-                <div className="flex items-end justify-between gap-3 mt-3">
+                      {s.promocion && (
+                        <p className="mt-1.5 text-xs font-medium text-emerald-700">
+                          {s.promocion} · −{dinero(s.descuento)}
+                        </p>
+                      )}
+
+                      <div className="flex items-end justify-between gap-3 mt-2">
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" onClick={() => onEditarServicio(g, s)} className={BOTON}>
+                            Editar
+                          </button>
+                          {descuento.disponible && (
+                            <BotonDescuento
+                              pct={s.manualPct}
+                              onAbrir={() => onDescuento({ clave: s.clave, nombre: `${s.servicio.nombre} · ${s.precio.tipo}` })}
+                              onQuitar={() => carrito.quitarDescuento(s.clave)}
+                            />
+                          )}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-semibold text-sm">{dinero(s.totalServicio)}</p>
+                          {s.descuento > 0 && <p className="text-xs text-neutral-400 line-through">{dinero(s.totalSinPromo)}</p>}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onEditarArticulo(n)}
-                      className="min-h-9 px-3 rounded-lg border border-[var(--c-borde)] text-sm"
-                    >
-                      Editar
+                    <button type="button" onClick={() => onEditarDatos(g)} className={BOTON}>
+                      Datos
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => carrito.duplicarArticulo(n.clave)}
-                      className="min-h-9 px-3 rounded-lg border border-[var(--c-borde)] text-sm"
-                    >
+                    <button type="button" disabled={Boolean(motivoOtro)} onClick={() => onOtroServicio(g)} className={BOTON}>
+                      + Otro servicio
+                    </button>
+                    <button type="button" disabled={Boolean(motivoDup)} onClick={() => carrito.duplicarArticulo(g.clave)} className={BOTON}>
                       Duplicar
                     </button>
-                    {descuento.disponible && (
-                      <BotonDescuento
-                        pct={n.manualPct}
-                        onAbrir={() => onDescuento({ clave: n.clave, nombre: `${n.servicio.nombre} · ${n.precio.tipo}` })}
-                        onQuitar={() => carrito.quitarDescuento(n.clave)}
-                      />
-                    )}
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="font-semibold">{dinero(n.totalArticulo)}</p>
-                    {n.descuento > 0 && <p className="text-xs text-neutral-400 line-through">{dinero(n.totalSinPromo)}</p>}
-                  </div>
+                  <p className="font-semibold">{dinero(g.total)}</p>
                 </div>
+                {(motivoOtro || motivoDup) && <p className="mt-2 text-xs text-amber-700">{motivoOtro || motivoDup}</p>}
               </li>
             );
           })}

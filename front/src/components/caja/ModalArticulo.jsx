@@ -1,47 +1,53 @@
 import { useState } from 'react';
-import { CAMPOS_ARTICULO, sumarDias } from '@plataforma/calculos';
+import { CAMPOS_ARTICULO, MAX_COMENTARIO, sumarDias } from '@plataforma/calculos';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { formatearFechaLarga, formatearMoneda } from '../../utils/formato.js';
 import Modal from '../shared/Modal.jsx';
 import Boton from '../shared/Boton.jsx';
 import Campo from '../shared/Campo.jsx';
-import CampoSugerido from './CampoSugerido.jsx';
+import Plegable from '../shared/Plegable.jsx';
+import CamposArticulo from './CamposArticulo.jsx';
 
-// Campos con sugerencias de lo ya escrito; el resto se escribe libre
-const CON_SUGERENCIAS = ['marca', 'talla', 'color', 'modelo', 'textura'];
-
-// inicial: un artículo ya capturado cuando se edita o se duplica
-export default function ModalArticulo({ servicio, precio, config, inicial, onAceptar, onCerrar }) {
+// modo: 'completo' (artículo nuevo + servicio) · 'datos' (solo el artículo) · 'servicio' (solo extras y fecha)
+// inicialDatos: { datos, comentario } · inicialServicio: { extraIds, fechaPrometida, fechaMostrada }
+export default function ModalArticulo({ modo = 'completo', servicio, precio, config, inicialDatos, inicialServicio, onAceptar, onCerrar }) {
   const { empresa } = useAuth();
   const dinero = (v) => formatearMoneda(v, empresa.moneda);
-  const dias = servicio.tiempoDias ?? 0;
+  const conDatos = modo !== 'servicio';
+  const conServicio = modo !== 'datos';
+
+  const dias = servicio?.tiempoDias ?? 0;
   const fechaPorDefecto = sumarDias(config.hoy, dias);
 
-  const [articulo, setArticulo] = useState(() =>
-    Object.fromEntries(CAMPOS_ARTICULO.map(({ clave }) => [clave, inicial?.articulo?.[clave] ?? '']))
+  const [datos, setDatos] = useState(() =>
+    Object.fromEntries(CAMPOS_ARTICULO.map(({ clave }) => [clave, inicialDatos?.datos?.[clave] ?? '']))
   );
-  const [extraIds, setExtraIds] = useState(inicial?.extraIds ?? []);
-  const [fecha, setFecha] = useState(inicial?.fechaPrometida ?? fechaPorDefecto);
+  const [comentario, setComentario] = useState(inicialDatos?.comentario ?? '');
+  const [extraIds, setExtraIds] = useState(inicialServicio?.extraIds ?? []);
+  const [fecha, setFecha] = useState(inicialServicio?.fechaMostrada ?? fechaPorDefecto);
 
-  const visibles = CAMPOS_ARTICULO.filter(({ clave }) => config.camposArticulo[clave] !== 'oculto');
   const alternarExtra = (id) => setExtraIds((e) => (e.includes(id) ? e.filter((x) => x !== id) : [...e, id]));
 
   const enviar = (e) => {
     e.preventDefault();
     onAceptar({
-      articulo,
+      datos,
+      comentario,
       extraIds,
       // Solo se manda la fecha si el cajero la cambió; si no, el servidor calcula la suya
-      fechaPrometida: fecha !== fechaPorDefecto ? fecha : null,
+      fechaPrometida: conServicio && fecha !== fechaPorDefecto ? fecha : null,
       fechaMostrada: fecha,
     });
   };
+
+  const titulo = conServicio ? servicio.nombre : 'Datos del artículo';
+  const boton = modo === 'completo' ? 'Agregar a la nota' : modo === 'servicio' && !inicialServicio ? 'Agregar servicio' : 'Guardar';
 
   return (
     <Modal
       abierto
       ancho="sm:max-w-xl"
-      titulo={servicio.nombre}
+      titulo={titulo}
       onCerrar={onCerrar}
       pie={
         <>
@@ -49,46 +55,35 @@ export default function ModalArticulo({ servicio, precio, config, inicial, onAce
             Cancelar
           </Boton>
           <Boton type="submit" form="form-articulo" className="flex-1">
-            {inicial ? 'Guardar' : 'Agregar a la nota'}
+            {boton}
           </Boton>
         </>
       }
     >
       <form id="form-articulo" onSubmit={enviar} className="space-y-5">
-        <p className="text-sm text-neutral-500">
-          {precio.tipo} · <span className="font-semibold text-neutral-800">{dinero(precio.precio)}</span>
-        </p>
+        {conServicio && (
+          <p className="text-sm text-neutral-500">
+            {precio.tipo} · <span className="font-semibold text-neutral-800">{dinero(precio.precio)}</span>
+          </p>
+        )}
 
-        <div className="grid sm:grid-cols-2 gap-4">
-          {visibles.map(({ clave, etiqueta }) => {
-            const obligatorio = config.camposArticulo[clave] === 'obligatorio';
-            if (CON_SUGERENCIAS.includes(clave)) {
-              return (
-                <CampoSugerido
-                  key={clave}
-                  campo={clave}
-                  etiqueta={etiqueta}
-                  valor={articulo[clave]}
-                  obligatorio={obligatorio}
-                  onCambio={(v) => setArticulo((a) => ({ ...a, [clave]: v }))}
-                />
-              );
-            }
-            return (
+        {conDatos && (
+          <>
+            <CamposArticulo config={config} datos={datos} onCambio={(clave, v) => setDatos((a) => ({ ...a, [clave]: v }))} />
+
+            <Plegable titulo="Comentario interno (opcional)" abiertaInicial={Boolean(comentario)}>
               <Campo
-                key={clave}
-                className="sm:col-span-2"
-                etiqueta={obligatorio ? `${etiqueta} *` : etiqueta}
-                value={articulo[clave]}
-                onChange={(e) => setArticulo((a) => ({ ...a, [clave]: e.target.value }))}
-                maxLength={300}
-                required={obligatorio}
+                etiqueta="Comentario"
+                value={comentario}
+                onChange={(e) => setComentario(e.target.value)}
+                maxLength={MAX_COMENTARIO}
+                ayuda="Solo lo ve tu equipo. No sale en el ticket del cliente."
               />
-            );
-          })}
-        </div>
+            </Plegable>
+          </>
+        )}
 
-        {servicio.extras.length > 0 && (
+        {conServicio && servicio.extras.length > 0 && (
           <fieldset>
             <legend className="text-sm font-medium text-neutral-600 mb-2">Extras</legend>
             <div className="space-y-1">
@@ -108,19 +103,21 @@ export default function ModalArticulo({ servicio, precio, config, inicial, onAce
           </fieldset>
         )}
 
-        <Campo
-          etiqueta="Fecha prometida"
-          type="date"
-          min={config.hoy}
-          value={fecha}
-          onChange={(e) => e.target.value && setFecha(e.target.value)}
-          ayuda={
-            fecha === fechaPorDefecto
-              ? `Según el servicio: ${formatearFechaLarga(fechaPorDefecto)}. Puedes cambiarla.`
-              : `Cambiaste la fecha. La del servicio era el ${formatearFechaLarga(fechaPorDefecto)}.`
-          }
-          required
-        />
+        {conServicio && (
+          <Campo
+            etiqueta="Fecha prometida"
+            type="date"
+            min={config.hoy}
+            value={fecha}
+            onChange={(e) => e.target.value && setFecha(e.target.value)}
+            ayuda={
+              fecha === fechaPorDefecto
+                ? `Según el servicio: ${formatearFechaLarga(fechaPorDefecto)}. Puedes cambiarla.`
+                : `Cambiaste la fecha. La del servicio era el ${formatearFechaLarga(fechaPorDefecto)}.`
+            }
+            required
+          />
+        )}
       </form>
     </Modal>
   );

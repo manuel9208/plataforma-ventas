@@ -18,6 +18,7 @@ export function venta(v, partidas, pagos, nota = NOTA_VACIA) {
       estado: f.estado_trabajo,
       fechaPrometida: f.fecha_prometida,
       fechaPrometidaOriginal: f.fecha_prometida_original,
+      articuloId: f.venta_articulo_id ?? null,
       total: Number(f.total),
       promocion: f.promocion_nombre ?? null,
       descuento: Number(f.descuento ?? 0),

@@ -4,6 +4,7 @@ export const TIPOS_PROMOCION = [
   { id: 'descuento', nombre: 'Descuento', descripcion: 'Baja el precio de lo que elijas.' },
   { id: 'happy_hour', nombre: 'Happy hour', descripcion: 'Un descuento solo en ciertos días y horas.' },
   { id: 'combo', nombre: 'Combo', descripcion: 'Varios artículos juntos a un precio especial.' },
+  { id: 'lleva_paga', nombre: 'Lleva y paga', descripcion: 'Lleva varios y paga menos: 2x1, 3x2, 3 pagando 1.5…' },
 ];
 export const MODOS_DESCUENTO = ['porcentaje', 'monto'];
 export const TIPOS_OBJETIVO = ['departamento', 'producto', 'servicio'];
@@ -12,9 +13,13 @@ const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 const IDS_DIA = DIAS.map((d) => d.id);
 const MAX_OBJETIVOS = 100;
 const MAX_ARTICULOS_COMBO = 10;
+const MAX_LLEVA = 10;
 
 const dosDecimales = (v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6;
 const entero = (v) => Number.isInteger(v) && v > 0;
+
+// Nombre automático de una promoción "lleva y paga": 2x1, 3x2, 3x1.5
+export const nombreLlevaPaga = (lleva, paga) => `${lleva}x${paga}`;
 
 // Misma regla que esFechaISO
 function fechaOk(s) {
@@ -23,8 +28,28 @@ function fechaOk(s) {
   return !Number.isNaN(f.getTime()) && f.toISOString().slice(0, 10) === s;
 }
 
+// "A todo" o "solo a lo que elija". Llena p.aplicaA y p.objetivos. Devuelve el texto del error o null.
+function leerAplicaA(x, p) {
+  p.aplicaA = x.aplicaA === 'seleccion' ? 'seleccion' : 'todo';
+  if (p.aplicaA !== 'seleccion') return null;
+  const objetivos = x.objetivos ?? [];
+  if (!Array.isArray(objetivos) || objetivos.length === 0) return 'Elige a qué se aplica la promoción';
+  if (objetivos.length > MAX_OBJETIVOS) return `Elige máximo ${MAX_OBJETIVOS} artículos o departamentos`;
+  const vistos = new Set();
+  for (const o of objetivos) {
+    if (!TIPOS_OBJETIVO.includes(o?.tipo) || !entero(o?.id)) return 'Hay un artículo inválido en la lista';
+    const clave = `${o.tipo}:${o.id}`;
+    if (!vistos.has(clave)) {
+      vistos.add(clave);
+      p.objetivos.push({ tipo: o.tipo, id: o.id });
+    }
+  }
+  return null;
+}
+
 // Revisa y limpia una promoción. Lo usan el servidor (decide) y la pantalla (avisa).
 // Combo: cada pieza cuenta 1; las piezas a granel no entran (lo revisa el servidor con la base).
+// Lleva y paga: lleva (2 a 10) y paga (mayor a 0 y menor que lleva); el granel se excluye al calcular.
 export function validarPromocion(x) {
   const falla = (error) => ({ ok: false, error });
   const nombre = String(x?.nombre ?? '').replace(/\s+/g, ' ').trim();
@@ -38,6 +63,8 @@ export function validarPromocion(x) {
     modo: null,
     valor: null,
     precioCombo: null,
+    lleva: null,
+    paga: null,
     aplicaA: 'todo',
     objetivos: [],
     items: [],
@@ -93,6 +120,18 @@ export function validarPromocion(x) {
     return { ok: true, valor: p };
   }
 
+  if (tipo === 'lleva_paga') {
+    const { lleva, paga } = x;
+    if (!Number.isInteger(lleva) || lleva < 2 || lleva > MAX_LLEVA) return falla(`Lo que se lleva es un número entero de 2 a ${MAX_LLEVA}`);
+    if (typeof paga !== 'number' || !(paga > 0) || !dosDecimales(paga)) return falla('Escribe cuánto se paga (mayor a 0, máximo 2 decimales)');
+    if (paga >= lleva) return falla('Lo que se paga debe ser menos que lo que se lleva');
+    p.lleva = lleva;
+    p.paga = paga;
+    const errorAplica = leerAplicaA(x, p);
+    if (errorAplica) return falla(errorAplica);
+    return { ok: true, valor: p };
+  }
+
   // Descuento y happy hour
   if (!MODOS_DESCUENTO.includes(x.modo)) return falla('Elige si el descuento es en porcentaje o en dinero');
   const valor = x.valor;
@@ -102,21 +141,8 @@ export function validarPromocion(x) {
   p.modo = x.modo;
   p.valor = valor;
 
-  p.aplicaA = x.aplicaA === 'seleccion' ? 'seleccion' : 'todo';
-  if (p.aplicaA === 'seleccion') {
-    const objetivos = x.objetivos ?? [];
-    if (!Array.isArray(objetivos) || objetivos.length === 0) return falla('Elige a qué se aplica la promoción');
-    if (objetivos.length > MAX_OBJETIVOS) return falla(`Elige máximo ${MAX_OBJETIVOS} artículos o departamentos`);
-    const vistos = new Set();
-    for (const o of objetivos) {
-      if (!TIPOS_OBJETIVO.includes(o?.tipo) || !entero(o?.id)) return falla('Hay un artículo inválido en la lista');
-      const clave = `${o.tipo}:${o.id}`;
-      if (!vistos.has(clave)) {
-        vistos.add(clave);
-        p.objetivos.push({ tipo: o.tipo, id: o.id });
-      }
-    }
-  }
+  const errorAplica = leerAplicaA(x, p);
+  if (errorAplica) return falla(errorAplica);
 
   if (tipo === 'happy_hour') {
     if (!HORA.test(x.horaDesde ?? '') || !HORA.test(x.horaHasta ?? '')) return falla('Escribe de qué hora a qué hora aplica');
@@ -149,9 +175,10 @@ export function estadoPromocion(p, { zona, ahora = new Date() }) {
 
 export const promocionVigente = (p, contexto) => estadoPromocion(p, contexto) === 'vigente';
 
-// "10% de descuento", "$50.00 de descuento", "Combo por $250.00". dinero = el formato de moneda de la empresa.
+// "10% de descuento", "$50.00 de descuento", "Combo por $250.00", "Lleva 3, paga 1.5". dinero = el formato de moneda de la empresa.
 export function textoPromocion(p, dinero = (v) => v.toFixed(2)) {
   if (p.tipo === 'combo') return `Combo por ${dinero(p.precioCombo)}`;
+  if (p.tipo === 'lleva_paga') return `Lleva ${p.lleva}, paga ${p.paga}`;
   return p.modo === 'porcentaje' ? `${p.valor}% de descuento` : `${dinero(p.valor)} de descuento`;
 }
 

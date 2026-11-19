@@ -49,3 +49,44 @@ export function validarArticulo(articulo, config = CAMPOS_ARTICULO_DEFECTO) {
   }
   return { datos, error: null };
 }
+
+export const MAX_COMENTARIO = 300;
+
+export function limpiarComentario(texto) {
+  const v = String(texto ?? '').trim().replace(/\s+/g, ' ');
+  return v ? v.slice(0, MAX_COMENTARIO) : null;
+}
+
+// Una nota se captura por artículo (cada artículo con uno o varios servicios). Aquí se aplana a la lista de servicios, en orden.
+// Servidor y Caja usan ESTA función: las promociones y el descuento manual cuentan los servicios por posición (s0, s1…).
+// articulos: [{ datos, comentario?, servicios: [{ servicioId, tipoArticuloId, extraIds, fechaPrometida? }] }]
+export function aplanarArticulos(articulos = []) {
+  const servicios = [];
+  const grupos = [];
+  articulos.forEach((a, indice) => {
+    const posiciones = [];
+    for (const s of a.servicios ?? []) {
+      posiciones.push(servicios.length);
+      servicios.push({ ...s, articulo: a.datos ?? {}, indiceArticulo: indice });
+    }
+    grupos.push({ indice, comentario: limpiarComentario(a.comentario), posiciones });
+  });
+  return { servicios, grupos };
+}
+
+// Identifica "el mismo artículo" de un cliente: marca + talla + color + modelo + textura,
+// sin importar mayúsculas, acentos ni espacios de más. La descripción NO entra en la clave.
+const CAMPOS_CLAVE = ['marca', 'talla', 'color', 'modelo', 'textura'];
+const normalizarClave = (t) =>
+  String(t ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+// Devuelve '' si no hay ningún dato (ese artículo no se guarda)
+export function claveArticulo(datos = {}) {
+  const partes = CAMPOS_CLAVE.map((c) => normalizarClave(datos?.[c]));
+  return partes.some(Boolean) ? partes.join('|') : '';
+}

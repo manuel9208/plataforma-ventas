@@ -1,15 +1,85 @@
 import { useMemo, useState } from 'react';
-import { calcularLineaVenta, siguienteMayoreo, totalesVenta } from '@plataforma/calculos';
+import {
+  aCentavos,
+  aMonto,
+  aplicarPromocionesAPartidas,
+  calcularLineaVenta,
+  siguienteMayoreo,
+  totalAhorro,
+  totalesVenta,
+} from '@plataforma/calculos';
+
+export const MAX_ARTICULOS = 25;
+export const MAX_SERVICIOS_ARTICULO = 10;
+export const MAX_SERVICIOS_NOTA = 50;
 
 let contador = 0;
-const nuevaClave = () => `a${++contador}`;
+const nuevaClave = (prefijo) => `${prefijo}${++contador}`;
+const SIN_PROMOCIONES = [];
+const SIN_MANUAL = { lineas: {}, motivo: '', autorizacion: null };
+const sumaC = (valores) => valores.reduce((s, v) => s + aCentavos(v), 0);
 
-// Productos: un renglón por presentación. Servicios: un renglón por artículo (con sus extras).
-// Los importes que se muestran son informativos: el servidor vuelve a calcular todo al cobrar.
-export function useCarrito(incluyeIva) {
+const nuevoServicio = (servicio, precio, s = {}) => ({
+  clave: nuevaClave('v'),
+  servicio,
+  precio,
+  extraIds: s.extraIds ?? [],
+  fechaPrometida: s.fechaPrometida ?? null,
+  fechaMostrada: s.fechaMostrada,
+});
+
+// Productos: un renglón por presentación. Servicios: artículos (unos tenis) con uno o varios servicios cada uno.
+// Los importes salen de las MISMAS funciones que usa el servidor; el servidor vuelve a calcular todo al cobrar.
+export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES) {
   const [renglones, setRenglones] = useState([]);
+  // [{ clave: 'a#', datos, comentario, servicios: [{ clave: 'v#', servicio, precio, extraIds, fechaPrometida, fechaMostrada }] }]
   const [articulos, setArticulos] = useState([]);
+  const [cliente, setCliente] = useState(null); // { envio, vista } o null
+  // Descuento manual: { lineas: { claveDelRenglón: porcentaje }, motivo, autorizacion }
+  const [manual, setManual] = useState(SIN_MANUAL);
 
+  const numServicios = articulos.reduce((n, g) => n + g.servicios.length, 0);
+
+  const motivoLimite =
+    articulos.length >= MAX_ARTICULOS
+      ? `Máximo ${MAX_ARTICULOS} artículos por nota.`
+      : numServicios >= MAX_SERVICIOS_NOTA
+        ? `Máximo ${MAX_SERVICIOS_NOTA} servicios por nota.`
+        : '';
+
+  const motivoServicio = (claveArticulo) => {
+    const g = articulos.find((x) => x.clave === claveArticulo);
+    if (g && g.servicios.length >= MAX_SERVICIOS_ARTICULO) return `Máximo ${MAX_SERVICIOS_ARTICULO} servicios por artículo.`;
+    return numServicios >= MAX_SERVICIOS_NOTA ? `Máximo ${MAX_SERVICIOS_NOTA} servicios por nota.` : '';
+  };
+
+  const motivoDuplicar = (claveArticulo) => {
+    const g = articulos.find((x) => x.clave === claveArticulo);
+    if (articulos.length >= MAX_ARTICULOS) return `Máximo ${MAX_ARTICULOS} artículos por nota.`;
+    if (g && numServicios + g.servicios.length > MAX_SERVICIOS_NOTA) return `Máximo ${MAX_SERVICIOS_NOTA} servicios por nota.`;
+    return '';
+  };
+
+  const quitarDescuento = (clave) =>
+    setManual((m) => {
+      const lineas = { ...m.lineas };
+      delete lineas[clave];
+      return Object.keys(lineas).length ? { ...m, lineas } : SIN_MANUAL;
+    });
+
+  const ponerDescuento = (claves, porcentaje, auth) =>
+    setManual((m) => ({
+      lineas: { ...m.lineas, ...Object.fromEntries(claves.map((c) => [c, porcentaje])) },
+      motivo: auth.motivo,
+      autorizacion: { ...(auth.telefono ? { telefono: auth.telefono } : {}), pin: auth.pin },
+    }));
+
+  const ponerAutorizacion = (auth) =>
+    setManual((m) => ({ ...m, motivo: auth.motivo, autorizacion: { ...(auth.telefono ? { telefono: auth.telefono } : {}), pin: auth.pin } }));
+
+  const limpiarAutorizacion = () => setManual((m) => ({ ...m, autorizacion: null }));
+
+  // ---------- Productos ----------
   const agregar = (producto, presentacion, cantidad = 1) =>
     setRenglones((actuales) => {
       const i = actuales.findIndex((r) => r.presentacion.id === presentacion.id);
@@ -24,32 +94,92 @@ export function useCarrito(incluyeIva) {
       actuales.map((r) => (r.presentacion.id === presentacionId ? { ...r, cantidad: Number(Number(cantidad).toFixed(3)) } : r))
     );
 
-  const quitar = (presentacionId) => setRenglones((actuales) => actuales.filter((r) => r.presentacion.id !== presentacionId));
+  const quitar = (presentacionId) => {
+    setRenglones((actuales) => actuales.filter((r) => r.presentacion.id !== presentacionId));
+    quitarDescuento(`p${presentacionId}`);
+  };
 
-  // datos: { articulo, extraIds, fechaPrometida, fechaMostrada }
-  const agregarArticulo = (servicio, precio, datos) =>
-    setArticulos((a) => [...a, { clave: nuevaClave(), servicio, precio, ...datos }]);
+  // ---------- Artículos y servicios ----------
+  // art: { datos, comentario } · s: { servicio, precio, extraIds, fechaPrometida, fechaMostrada }
+  const agregarArticulo = (art, s) =>
+    setArticulos((a) => [
+      ...a,
+      { clave: nuevaClave('a'), datos: art.datos, comentario: art.comentario ?? '', servicios: [nuevoServicio(s.servicio, s.precio, s)] },
+    ]);
 
-  const editarArticulo = (clave, datos) => setArticulos((a) => a.map((x) => (x.clave === clave ? { ...x, ...datos } : x)));
+  // Un artículo guardado del cliente: entra con todos sus servicios de una vez
+  const agregarArticuloConServicios = (art, lista) =>
+    setArticulos((a) => [
+      ...a,
+      {
+        clave: nuevaClave('a'),
+        datos: art.datos,
+        comentario: art.comentario ?? '',
+        servicios: lista.map((s) => nuevoServicio(s.servicio, s.precio, s)),
+      },
+    ]);
 
-  const duplicarArticulo = (clave) =>
+  const editarDatos = (claveArticulo, art) =>
+    setArticulos((a) => a.map((g) => (g.clave === claveArticulo ? { ...g, datos: art.datos, comentario: art.comentario ?? '' } : g)));
+
+  const agregarServicio = (claveArticulo, s) =>
+    setArticulos((a) =>
+      a.map((g) => (g.clave === claveArticulo ? { ...g, servicios: [...g.servicios, nuevoServicio(s.servicio, s.precio, s)] } : g))
+    );
+
+  const editarServicio = (claveServicio, s) =>
+    setArticulos((a) =>
+      a.map((g) => ({
+        ...g,
+        servicios: g.servicios.map((x) =>
+          x.clave === claveServicio ? { ...x, extraIds: s.extraIds, fechaPrometida: s.fechaPrometida, fechaMostrada: s.fechaMostrada } : x
+        ),
+      }))
+    );
+
+  // Si el artículo se queda sin servicios, se quita completo
+  const quitarServicio = (claveServicio) => {
+    setArticulos((a) =>
+      a.map((g) => ({ ...g, servicios: g.servicios.filter((x) => x.clave !== claveServicio) })).filter((g) => g.servicios.length)
+    );
+    quitarDescuento(claveServicio);
+  };
+
+  const quitarArticulo = (claveArticulo) => {
+    const g = articulos.find((x) => x.clave === claveArticulo);
+    setArticulos((a) => a.filter((x) => x.clave !== claveArticulo));
+    g?.servicios.forEach((s) => quitarDescuento(s.clave));
+  };
+
+  const duplicarArticulo = (claveArticulo) => {
+    if (motivoDuplicar(claveArticulo)) return;
     setArticulos((a) => {
-      const i = a.findIndex((x) => x.clave === clave);
+      const i = a.findIndex((x) => x.clave === claveArticulo);
       if (i === -1) return a;
+      const g = a[i];
       const copia = [...a];
-      copia.splice(i + 1, 0, { ...a[i], clave: nuevaClave(), articulo: { ...a[i].articulo }, extraIds: [...a[i].extraIds] });
+      copia.splice(i + 1, 0, {
+        clave: nuevaClave('a'),
+        datos: { ...g.datos },
+        comentario: g.comentario,
+        servicios: g.servicios.map((s) => nuevoServicio(s.servicio, s.precio, s)),
+      });
       return copia;
     });
+  };
 
-  const quitarArticulo = (clave) => setArticulos((a) => a.filter((x) => x.clave !== clave));
+  const ponerCliente = (envio, vista) => setCliente(envio ? { envio, vista } : null);
 
   const vaciar = () => {
     setRenglones([]);
     setArticulos([]);
+    setCliente(null);
+    setManual(SIN_MANUAL);
   };
 
   const calculado = useMemo(() => {
-    const lineas = renglones.map((r) => {
+    // 1) Precio normal (con mayoreo)
+    const base = renglones.map((r) => {
       const c = calcularLineaVenta({
         precioBase: r.presentacion.precio,
         mayoreo: r.presentacion.mayoreo,
@@ -57,37 +187,156 @@ export function useCarrito(incluyeIva) {
         tasa: r.producto.tasa,
         incluyeIva,
       });
-      return { ...r, ...c, proximoMayoreo: siguienteMayoreo(r.presentacion.mayoreo, r.cantidad) };
+      return { ...r, ...c, clave: `p${r.presentacion.id}`, calc: c, proximoMayoreo: siguienteMayoreo(r.presentacion.mayoreo, r.cantidad) };
     });
 
-    const notas = articulos.map((a) => {
-      const base = calcularLineaVenta({ precioBase: a.precio.precio, mayoreo: [], cantidad: 1, tasa: a.servicio.tasa, incluyeIva });
-      const extras = a.extraIds
-        .map((id) => a.servicio.extras.find((x) => x.id === id))
+    // Lista aplanada de servicios, en el mismo orden que el servidor (s0, s1, …)
+    const serviciosBase = articulos.flatMap((g) => g.servicios).map((s) => {
+      const principal = calcularLineaVenta({ precioBase: s.precio.precio, mayoreo: [], cantidad: 1, tasa: s.servicio.tasa, incluyeIva });
+      const extras = s.extraIds
+        .map((id) => s.servicio.extras.find((x) => x.id === id))
         .filter(Boolean)
         .map((x) => ({ ...x, ...calcularLineaVenta({ precioBase: x.precio, mayoreo: [], cantidad: 1, tasa: x.tasa, incluyeIva }) }));
-      const totalArticulo = Number((base.total + extras.reduce((s, x) => s + x.total, 0)).toFixed(2));
-      return { ...a, base, extras, totalArticulo };
+      return { ...s, base: principal, extras };
     });
 
-    const piezas = [...lineas, ...notas.flatMap((n) => [n.base, ...n.extras])];
+    // 2) Promociones y descuento manual (misma función que el servidor)
+    const manuales = {};
+    base.forEach((l) => {
+      if (manual.lineas[l.clave]) manuales[l.clave] = { porcentaje: manual.lineas[l.clave] };
+    });
+    serviciosBase.forEach((s, i) => {
+      if (manual.lineas[s.clave]) manuales[`s${i}`] = { porcentaje: manual.lineas[s.clave] };
+    });
+
+    const final = aplicarPromocionesAPartidas({
+      productos: base.map((l) => ({
+        clave: l.clave,
+        productoId: l.producto.id,
+        presentacionId: l.presentacion.id,
+        departamentoId: l.producto.departamentoId,
+        unidad: l.presentacion.unidad,
+        cantidad: l.cantidad,
+        precioLista: l.presentacion.precio,
+        precioAplicado: l.precioAplicado,
+        tasa: l.producto.tasa,
+        total: l.calc.total,
+        calculada: l.calc,
+      })),
+      servicios: serviciosBase.map((s, i) => ({
+        clave: `s${i}`,
+        servicioId: s.servicio.id,
+        tipoArticuloId: s.precio.tipoArticuloId,
+        departamentoId: s.servicio.departamentoId,
+        precioAplicado: s.precio.precio,
+        tasa: s.servicio.tasa,
+        total: s.base.total,
+        calculada: s.base,
+      })),
+      promociones,
+      manuales,
+      incluyeIva,
+    });
+
+    // 3) Lo que se muestra en cada renglón
+    const lineas = base.map((l) => {
+      const partes = final.productos.filter((p) => p.clave === l.clave);
+      return {
+        ...l,
+        total: aMonto(sumaC(partes.map((p) => p.total))),
+        totalSinPromo: l.total,
+        ahorro: totalAhorro(partes),
+        manualPct: manual.lineas[l.clave] ?? null,
+        partes: partes.map((p) => ({ cantidad: p.cantidad, total: p.total, promocion: p.promocionNombre ?? null, descuento: p.descuento ?? 0 })),
+      };
+    });
+
+    const serviciosCalc = serviciosBase.map((s, i) => {
+      const f = final.servicios[i];
+      const extrasC = sumaC(s.extras.map((x) => x.total));
+      return {
+        ...s,
+        totalServicio: aMonto(aCentavos(f.total) + extrasC),
+        totalSinPromo: aMonto(aCentavos(s.base.total) + extrasC),
+        promocion: f.promocionNombre ?? null,
+        descuento: f.descuento ?? 0,
+        manualPct: manual.lineas[s.clave] ?? null,
+      };
+    });
+    const porClave = new Map(serviciosCalc.map((s) => [s.clave, s]));
+
+    const grupos = articulos.map((g) => {
+      const servicios = g.servicios.map((s) => porClave.get(s.clave));
+      return { clave: g.clave, datos: g.datos, comentario: g.comentario, servicios, total: aMonto(sumaC(servicios.map((s) => s.totalServicio))) };
+    });
+
+    const piezas = [...final.productos.map((p) => p.calculada), ...final.servicios.map((s) => s.calculada), ...serviciosBase.flatMap((s) => s.extras)];
     const totales = piezas.length ? totalesVenta(piezas) : { total: 0, subtotal: null, iva: null, desglosado: false };
-    const totalServicios = Number(notas.reduce((s, n) => s + n.totalArticulo, 0).toFixed(2));
-    const totalProductos = Number((totales.total - totalServicios).toFixed(2));
-    return { lineas, notas, totales, totalServicios, totalProductos };
-  }, [renglones, articulos, incluyeIva]);
+    const totalServicios = aMonto(sumaC(serviciosCalc.map((s) => s.totalServicio)));
+    const totalProductos = aMonto(aCentavos(totales.total) - aCentavos(totalServicios));
+
+    // 4) Descuento manual hacia el servidor (servicioIndice = posición en la lista aplanada)
+    const lineasManual = [
+      ...base.filter((l) => manual.lineas[l.clave]).map((l) => ({ presentacionId: l.presentacion.id, porcentaje: manual.lineas[l.clave] })),
+      ...serviciosBase.flatMap((s, i) => (manual.lineas[s.clave] ? [{ servicioIndice: i, porcentaje: manual.lineas[s.clave] }] : [])),
+    ];
+    const tieneDescuentoManual = lineasManual.length > 0;
+
+    // 5) Artículos tal como los pide el servidor
+    const articulosEnvio = articulos.map((g) => ({
+      datos: Object.fromEntries(Object.entries(g.datos).filter(([, v]) => v !== '')),
+      ...(g.comentario.trim() ? { comentario: g.comentario.trim() } : {}),
+      servicios: g.servicios.map((s) => ({
+        servicioId: s.servicio.id,
+        tipoArticuloId: s.precio.tipoArticuloId,
+        ...(s.fechaPrometida ? { fechaPrometida: s.fechaPrometida } : {}),
+        extraIds: s.extraIds,
+      })),
+    }));
+
+    return {
+      lineas,
+      grupos,
+      articulosEnvio,
+      totales,
+      totalServicios,
+      totalProductos,
+      ahorro: totalAhorro([...final.productos, ...final.servicios]),
+      tieneDescuentoManual,
+      faltaAutorizacion: tieneDescuentoManual && !manual.autorizacion,
+      descuentoManual:
+        tieneDescuentoManual && manual.autorizacion ? { motivo: manual.motivo, autorizacion: manual.autorizacion, lineas: lineasManual } : null,
+      claves: [...base.map((l) => l.clave), ...serviciosBase.map((s) => s.clave)],
+    };
+  }, [renglones, articulos, incluyeIva, promociones, manual]);
 
   return {
     ...calculado,
     vacio: renglones.length === 0 && articulos.length === 0,
     tieneServicios: articulos.length > 0,
+    numServicios,
+    motivoLimite,
+    motivoServicio,
+    motivoDuplicar,
+    motivoManual: manual.motivo,
+    cliente,
+    ponerCliente,
+    porcentajeDe: (clave) => manual.lineas[clave] ?? null,
     agregar,
     poner,
     quitar,
     agregarArticulo,
-    editarArticulo,
-    duplicarArticulo,
+    agregarArticuloConServicios,
+    editarDatos,
+    agregarServicio,
+    editarServicio,
+    quitarServicio,
     quitarArticulo,
+    duplicarArticulo,
+    ponerDescuento,
+    quitarDescuento,
+    ponerAutorizacion,
+    limpiarAutorizacion,
     vaciar,
   };
 }

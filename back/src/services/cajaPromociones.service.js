@@ -18,13 +18,15 @@ export async function vigentes(actor) {
   return {
     promociones: todas
       .filter((p) => promocionVigente(p, { zona }))
-      .map(({ id, nombre, tipo, modo, valor, precioCombo, aplicaA, objetivos, items }) => ({
+      .map(({ id, nombre, tipo, modo, valor, precioCombo, lleva, paga, aplicaA, objetivos, items }) => ({
         id,
         nombre,
         tipo,
         modo,
         valor,
         precioCombo,
+        lleva,
+        paga,
         aplicaA,
         objetivos,
         items,

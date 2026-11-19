@@ -13,6 +13,7 @@ import {
   resolverPie,
   validarArticulo,
   validarCantidad,
+  aplanarArticulos,
 } from '@plataforma/calculos';
 import { pool, conTransaccion } from '../config/db.js';
 import { ErrorHttp } from '../utils/errores.js';
@@ -27,6 +28,7 @@ import * as turnosRepo from '../repositories/turnos.repository.js';
 import * as clientesRepo from '../repositories/clientes.repository.js';
 import * as listaRepo from '../repositories/notasLista.repository.js';
 import * as configRepo from '../repositories/configuracion.repository.js';
+import { guardarArticulosDeCliente } from './clienteArticulos.service.js';
 import { venta as serializarVenta } from '../serializers/ventas.serializer.js';
 
 const MAX_DIAS_PROMESA = 365;
@@ -176,6 +178,7 @@ async function armarServicios(db, e, sucursalId, hoy, solicitados, camposArticul
       iva: c.iva,
       total: c.total,
       clave: `s${indice}`,
+      indiceArticulo: s.indiceArticulo ?? null,
       departamentoId: Number(sv.departamento_id),
       fechaPrometida,
       articulo,
@@ -200,6 +203,14 @@ export async function crear(actor, datos, ip) {
   const turno = await turnosRepo.turnoAbiertoDeUsuario(pool, e, actor.id);
   if (!turno) throw new ErrorHttp(409, 'Abre tu turno para vender');
   if (turno.de_otro_dia) throw new ErrorHttp(409, 'Tu turno es de otro día. Ciérralo y abre uno nuevo.');
+
+  // Si la nota viene por artículos (varios servicios por artículo) se aplana a la lista de servicios, en orden:
+  // las claves s0, s1… de las promociones y del descuento manual salen de ese orden
+  const { servicios: serviciosPedidos, grupos } = datos.articulos?.length
+    ? aplanarArticulos(datos.articulos)
+    : { servicios: datos.servicios, grupos: [] };
+  if (serviciosPedidos.length > 50) throw new ErrorHttp(400, 'Demasiados servicios en una sola nota');
+  datos = { ...datos, servicios: serviciosPedidos };
 
   // El PIN solo existe si hay servicios; se guarda cifrado y se devuelve una única vez
   const pin = datos.servicios.length ? generarPinEntrega() : null;
@@ -332,6 +343,15 @@ export async function crear(actor, datos, ip) {
       // Primero los productos (se entregan al cobrar), luego cada servicio con sus extras
       await repo.insertarPartidas(db, e, datos.id, actor.id, productos);
       let orden = productos.length;
+      // Los artículos de la nota (cada uno agrupa sus servicios); sin artículos queda como siempre
+      const articuloIds = [];
+      for (const g of grupos) {
+        articuloIds[g.indice] = await notasRepo.insertarArticuloNota(db, e, {
+          ventaId: datos.id,
+          orden: g.indice + 1,
+          comentario: g.comentario,
+        });
+      }
       for (const s of servicios) {
         const partidaId = await notasRepo.insertarServicio(db, e, {
           ventaId: datos.id,
@@ -339,11 +359,15 @@ export async function crear(actor, datos, ip) {
           usuarioId: actor.id,
           sucursalId,
           ...s,
+          articuloId: s.indiceArticulo == null ? null : articuloIds[s.indiceArticulo],
         });
         for (const x of s.extras) {
           await notasRepo.insertarExtra(db, e, { ventaId: datos.id, orden: ++orden, padreId: partidaId, ...x });
         }
       }
+
+      // Los artículos del cliente quedan guardados para su próxima visita (si falla, el cobro no se detiene)
+      if (clienteId && servicios.length) await guardarArticulosDeCliente(db, e, clienteId, serviciosBase);
 
       const conPin = servicios.length > 0 && config.pinEntregaActivo;
       if (servicios.length) await notasRepo.marcarNota(db, e, datos.id, conPin ? pinHash : null);
@@ -363,6 +387,7 @@ export async function crear(actor, datos, ip) {
           total: totales.total,
           productos: productos.length,
           servicios: servicios.length,
+          articulos: grupos.length,
           pinEmitido: conPin,
           descuentos: aplicadas,
           descuentoManual: datos.descuentos ? { motivo: datos.descuentos.motivo, autorizadoPor: autorizo.id } : null,

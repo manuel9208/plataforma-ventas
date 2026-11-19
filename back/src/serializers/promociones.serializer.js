@@ -19,6 +19,8 @@ function base(f, zona) {
     modo: f.modo,
     valor: num(f.valor),
     precioCombo: num(f.precio_combo),
+    lleva: num(f.lleva),
+    paga: num(f.paga),
     aplicaA: f.aplica_a,
     sucursalIds: (f.sucursal_ids ?? []).map(Number),
     creadaEn: f.creado_en,
