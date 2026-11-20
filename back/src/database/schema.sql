@@ -1387,3 +1387,11 @@ ALTER TABLE cajas ADD COLUMN IF NOT EXISTS ancho_papel SMALLINT NOT NULL DEFAULT
 ALTER TABLE cajas ADD COLUMN IF NOT EXISTS corte_automatico BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE cajas ADD COLUMN IF NOT EXISTS abrir_cajon BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE cajas ADD COLUMN IF NOT EXISTS imprimir_area BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- ============ BLOQUE 36: FINANCIAMIENTO ============
+ALTER TABLE empresa_config ADD COLUMN IF NOT EXISTS financiamiento_activo BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE empresa_config ADD COLUMN IF NOT EXISTS financiamiento_cargo NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (financiamiento_cargo >= 0 AND financiamiento_cargo <= 9999.99);
+ALTER TABLE sucursal_config ADD COLUMN IF NOT EXISTS financiamiento_activo BOOLEAN;
+ALTER TABLE sucursal_config ADD COLUMN IF NOT EXISTS financiamiento_cargo NUMERIC(12,2) CHECK (financiamiento_cargo >= 0 AND financiamiento_cargo <= 9999.99);
+ALTER TABLE ventas ADD COLUMN IF NOT EXISTS financiada BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE partida_servicio ADD COLUMN IF NOT EXISTS cargo_financiamiento NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (cargo_financiamiento >= 0);

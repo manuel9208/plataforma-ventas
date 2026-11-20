@@ -1,7 +1,8 @@
-import { ETIQUETA_METODO } from '@plataforma/calculos';
+import { ETIQUETA_METODO, ticketEntregaTermico } from '@plataforma/calculos';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { formatearFechaHora } from '../../utils/formato.js';
 import Boton from '../shared/Boton.jsx';
+import BotonesImpresion from './BotonesImpresion.jsx';
 
 // Ticket de entrega. Nunca muestra el PIN.
 export default function TicketEntrega({ ticket, onCerrar }) {
@@ -67,9 +68,25 @@ export default function TicketEntrega({ ticket, onCerrar }) {
         </div>
 
         {ticket.pendientes > 0 && (
-          <p className="mt-4 text-center text-sm text-amber-700">
-            Aún quedan {ticket.pendientes} {ticket.pendientes === 1 ? 'artículo' : 'artículos'} de esta nota por entregar.
-          </p>
+          <div className="mt-4 text-sm">
+            <p className="text-center text-amber-700">
+              Aún quedan {ticket.pendientes} {ticket.pendientes === 1 ? 'artículo' : 'artículos'} de esta nota por entregar.
+            </p>
+            {(ticket.faltan ?? []).length > 0 && (
+              <ul className="mt-2 space-y-1 text-neutral-600">
+                {ticket.faltan.map((s) => (
+                  <li key={s.partidaId} className="rounded-xl bg-[#faf8f3] border border-[var(--c-borde)] px-3 py-2">
+                    <span className="font-medium">{s.nombre}</span>
+                    <span className="block text-xs text-neutral-500">
+                      {Object.values(s.articulo).join(' · ')}
+                      {Object.keys(s.articulo).length ? ' · ' : ''}
+                      {s.estado === 'listo' ? 'Listo para recoger' : 'En espera'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
 
         {ticket.pieEntrega && (
@@ -78,10 +95,16 @@ export default function TicketEntrega({ ticket, onCerrar }) {
       </div>
 
       {ticket.repetida && <p className="text-center text-xs text-neutral-400">Esta entrega ya estaba registrada; no se entregó de nuevo.</p>}
+      <BotonesImpresion
+        etiqueta="Imprimir ticket de entrega"
+        automatico={!ticket.repetida}
+        armar={({ impresion, empresa, fmt }) => [
+          ticketEntregaTermico(ticket, { ancho: impresion.anchoPapel, corte: impresion.corteAutomatico, empresa: empresa.nombre, fmt }),
+        ]}
+      />
       <Boton className="w-full" onClick={onCerrar}>
         Listo
       </Boton>
-      <p className="text-center text-xs text-neutral-400">La impresión del ticket llega en una etapa posterior.</p>
     </div>
   );
 }

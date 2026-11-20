@@ -68,6 +68,7 @@ export function notaDetalle(v, productos, articulos, pagos, pies, ajustes = { vi
       fechaPrometidaOriginal: a.fecha_prometida_original,
       listoEn: a.listo_en,
       total: Number(a.total),
+      cargoFinanciamiento: Number(a.cargo_financiamiento ?? 0),
       articulo: sinVacios({
         marca: a.marca,
         talla: a.talla,
@@ -127,6 +128,7 @@ export function notaDetalle(v, productos, articulos, pagos, pies, ajustes = { vi
     })),
     estado: estadoDeNota(servicios.map((s) => s.estado)),
     tienePin: v.tiene_pin,
+    financiada: v.financiada ?? false,
     creadaEn: v.creado_en,
     zonaHoraria: v.zona,
     servicios,

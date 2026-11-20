@@ -20,6 +20,7 @@ import { ErrorHttp } from '../utils/errores.js';
 import { registrarBitacora } from '../utils/bitacora.js';
 import { generarPinEntrega, hashPin } from '../utils/pin.js';
 import { moduloActivo } from '../utils/modulos.js';
+import { tienePermiso } from '../utils/permisos.js';
 import { autorizar } from './autorizacion.service.js';
 import { aplicarPromocionesVenta } from './promocionesVenta.service.js';
 import * as repo from '../repositories/ventas.repository.js';
@@ -32,6 +33,8 @@ import { guardarArticulosDeCliente } from './clienteArticulos.service.js';
 import { venta as serializarVenta } from '../serializers/ventas.serializer.js';
 
 const MAX_DIAS_PROMESA = 365;
+// Suma dos importes; si alguno no está desglosado (null), el resultado tampoco
+const sumarImporte = (a, b) => (a == null || b == null ? null : aMonto(aCentavos(a) + aCentavos(b)));
 const NO_DISPONIBLE_PRODUCTO = 'Uno de los productos ya no está disponible en esta sucursal. Actualiza el catálogo.';
 const NO_DISPONIBLE_SERVICIO = 'Uno de los servicios ya no está disponible en esta sucursal. Actualiza la pantalla.';
 
@@ -236,6 +239,14 @@ export async function crear(actor, datos, ip) {
       // Lo apagado en Configuración no se puede vender, aunque alguien lo pida por la fuerza
       if (datos.lineas.length && !config.vendeProductos) throw new ErrorHttp(409, 'Esta sucursal no vende productos.');
       if (datos.servicios.length && !config.vendeServicios) throw new ErrorHttp(409, 'Esta sucursal no vende servicios.');
+
+      // Financiar: sin anticipo de servicios y con un cargo por servicio. Lo decide la configuración y el permiso del usuario.
+      const financiada = datos.financiada === true;
+      if (financiada) {
+        if (!datos.servicios.length) throw new ErrorHttp(400, 'El financiamiento solo aplica a notas con servicios');
+        if (!config.financiamientoActivo) throw new ErrorHttp(409, 'El financiamiento no está activo en esta sucursal.');
+        if (!tienePermiso(actor.permisos, 'caja.financiar')) throw new ErrorHttp(403, 'No tienes permiso para financiar notas');
+      }
       const incluyeIva = await repo.preciosIncluyenIva(db, e);
       const hoy = hoyEnZona(turno.zona);
 
@@ -243,7 +254,7 @@ export async function crear(actor, datos, ip) {
       const serviciosBase = await armarServicios(db, e, sucursalId, hoy, datos.servicios, config.camposArticulo, incluyeIva);
 
       // Promociones vigentes y descuento manual: el servidor decide los precios finales
-      const { productos, servicios, aplicadas } = await aplicarPromocionesVenta(db, {
+      const { productos, servicios: serviciosConPromo, aplicadas } = await aplicarPromocionesVenta(db, {
         empresaId: e,
         sucursalId,
         zona: turno.zona,
@@ -255,6 +266,21 @@ export async function crear(actor, datos, ip) {
         autorizoId: autorizo?.id ?? null,
       });
 
+      // El cargo ya incluye IVA y no recibe promociones ni descuentos: se suma al total de cada servicio (los extras no llevan cargo)
+      const servicios =
+        financiada && config.financiamientoCargo > 0
+          ? serviciosConPromo.map((s) => {
+              const calculada = calcularLineaVenta({ precioBase: config.financiamientoCargo, mayoreo: [], cantidad: 1, tasa: s.tasa, incluyeIva });
+              return {
+                ...s,
+                cargo: { calculada, total: calculada.total },
+                base: sumarImporte(s.base, calculada.subtotal),
+                iva: sumarImporte(s.iva, calculada.iva),
+                total: aMonto(aCentavos(s.total) + aCentavos(calculada.total)),
+              };
+            })
+          : serviciosConPromo;
+
       // Sin teléfono no hay aviso por WhatsApp ni PIN: en notas con servicios el cliente es obligatorio
       if (servicios.length && !datos.clienteId && !datos.clienteNuevo) {
         throw new ErrorHttp(400, 'Para una nota de servicio el cliente es obligatorio (teléfono y nombre)');
@@ -262,7 +288,7 @@ export async function crear(actor, datos, ip) {
 
       const calculadas = [
         ...productos.map((l) => l.calculada),
-        ...servicios.flatMap((s) => [s.calculada, ...s.extras.map((x) => x.calculada)]),
+        ...servicios.flatMap((s) => [s.calculada, ...s.extras.map((x) => x.calculada), ...(s.cargo ? [s.cargo.calculada] : [])]),
       ];
       const totales = totalesVenta(calculadas);
 
@@ -272,7 +298,8 @@ export async function crear(actor, datos, ip) {
       }
 
       const centServicios = servicios.reduce(
-        (suma, s) => suma + aCentavos(s.calculada.total) + s.extras.reduce((a, x) => a + aCentavos(x.calculada.total), 0),
+        (suma, s) =>
+          suma + aCentavos(s.calculada.total) + s.extras.reduce((a, x) => a + aCentavos(x.calculada.total), 0) + (s.cargo ? aCentavos(s.cargo.calculada.total) : 0),
         0
       );
       const totalServicios = aMonto(centServicios);
@@ -288,6 +315,7 @@ export async function crear(actor, datos, ip) {
             totalServicios,
             porcentaje: config.abonoPorcentaje,
             esMinimo: config.abonoEsMinimo,
+            financiada,
           });
           pagos = normalizarPagosNota(totales.total, datos.pagos, minimo);
         }
@@ -360,6 +388,7 @@ export async function crear(actor, datos, ip) {
           sucursalId,
           ...s,
           articuloId: s.indiceArticulo == null ? null : articuloIds[s.indiceArticulo],
+          cargoFinanciamiento: s.cargo ? s.cargo.total : 0,
         });
         for (const x of s.extras) {
           await notasRepo.insertarExtra(db, e, { ventaId: datos.id, orden: ++orden, padreId: partidaId, ...x });
@@ -370,7 +399,7 @@ export async function crear(actor, datos, ip) {
       if (clienteId && servicios.length) await guardarArticulosDeCliente(db, e, clienteId, serviciosBase);
 
       const conPin = servicios.length > 0 && config.pinEntregaActivo;
-      if (servicios.length) await notasRepo.marcarNota(db, e, datos.id, conPin ? pinHash : null);
+      if (servicios.length) await notasRepo.marcarNota(db, e, datos.id, conPin ? pinHash : null, financiada);
 
       await repo.insertarPagos(db, e, { id: datos.id, turnoId: t.id, cajaId: t.caja_id, usuarioId: actor.id }, pagos);
 
@@ -389,6 +418,7 @@ export async function crear(actor, datos, ip) {
           servicios: servicios.length,
           articulos: grupos.length,
           pinEmitido: conPin,
+          financiada,
           descuentos: aplicadas,
           descuentoManual: datos.descuentos ? { motivo: datos.descuentos.motivo, autorizadoPor: autorizo.id } : null,
           pagos: pagos.map((p) => ({ forma: p.forma, monto: p.monto })),

@@ -20,15 +20,15 @@ const filaNueva = (forma = 'efectivo', monto = '') => ({ _k: `p${++contador}`, f
 const redondear = (n) => Number(Number(n).toFixed(2));
 
 // total: lo que cuesta todo. totalServicios: la parte que acepta abono. config: abono de la sucursal.
-export default function ModalCobro({ total, totalProductos = 0, totalServicios = 0, config, clienteInicial = null, enviando, error, onConfirmar, onCerrar }) {
+export default function ModalCobro({ total, totalProductos = 0, totalServicios = 0, financiada = false, config, clienteInicial = null, enviando, error, onConfirmar, onCerrar }) {
   const { empresa } = useAuth();
   const dinero = (v) => formatearMoneda(v, empresa.moneda);
   const esNota = totalServicios > 0;
 
   const minimo = esNota
-    ? pagoMinimoNota({ totalProductos, totalServicios, porcentaje: config.abonoPorcentaje, esMinimo: config.abonoEsMinimo })
+    ? pagoMinimoNota({ totalProductos, totalServicios, porcentaje: config.abonoPorcentaje, esMinimo: config.abonoEsMinimo, financiada })
     : total;
-  const sugerido = esNota ? abonoSugerido({ totalProductos, totalServicios, porcentaje: config.abonoPorcentaje }) : total;
+  const sugerido = esNota ? abonoSugerido({ totalProductos, totalServicios, porcentaje: config.abonoPorcentaje, financiada }) : total;
 
   const [modo, setModo] = useState('efectivo');
   const [aCobrar, setACobrar] = useState(String(sugerido)); // abono de la nota
@@ -115,7 +115,12 @@ export default function ModalCobro({ total, totalProductos = 0, totalServicios =
         <div className="text-center">
           <p className="text-sm text-neutral-500">Total de la nota</p>
           <p className="text-4xl font-semibold tracking-tight">{dinero(total)}</p>
-          {esNota && (
+          {esNota && financiada && (
+            <p className="text-sm font-medium text-amber-700 mt-1">
+              Financiado: sin anticipo de los servicios{minimo > 0 ? `. Productos de la nota: ${dinero(minimo)}` : ''}
+            </p>
+          )}
+          {esNota && !financiada && (
             <p className="text-sm text-neutral-500 mt-1">
               {config.abonoEsMinimo
                 ? `Abono mínimo: ${dinero(minimo)} (${config.abonoPorcentaje}% de los servicios)`

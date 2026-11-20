@@ -1,4 +1,4 @@
-import { bytesABase64, documentosAEscPos, nombreUnidad, totalAhorro } from '@plataforma/calculos';
+import { ETIQUETA_METODO, bytesABase64, documentosAEscPos, nombreUnidad, totalAhorro } from '@plataforma/calculos';
 import { ETIQUETA_FORMA } from './formasPago.js';
 import { formatearFechaHora, formatearFechaLarga, formatearMoneda, formatearTelefono } from './formato.js';
 import { enviarAlPuente, leerConfigImpresora } from './puenteImpresion.js';
@@ -15,6 +15,7 @@ export const formatoTicket = (moneda) => ({
   nombreUnidad,
   totalAhorro,
   telefono: formatearTelefono,
+  etiquetaMetodo: (m) => ETIQUETA_METODO[m] ?? m,
 });
 
 const esc = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);

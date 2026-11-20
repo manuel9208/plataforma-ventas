@@ -1,4 +1,5 @@
 import { hoyEnZona } from '@plataforma/calculos';
+import { tienePermiso } from '../utils/permisos.js';
 import { pool } from '../config/db.js';
 import { contextoDelTurno } from './cajaCatalogo.service.js';
 import * as repo from '../repositories/notas.repository.js';
@@ -13,7 +14,14 @@ export async function configuracion(actor) {
     repo.cargarConfig(pool, actor.empresaId, sucursalId),
     cajasRepo.impresionDeUsuario(pool, actor.empresaId, actor.id),
   ]);
-  return { ...c, hoy: hoyEnZona(zona), zonaHoraria: zona, impresion: impresionCaja(impresion) };
+  return {
+    ...c,
+    hoy: hoyEnZona(zona),
+    zonaHoraria: zona,
+    impresion: impresionCaja(impresion),
+    // Solo se ofrece "Financiado" si la sucursal lo tiene encendido y este usuario tiene el permiso
+    puedeFinanciar: c.financiamientoActivo && tienePermiso(actor.permisos, 'caja.financiar'),
+  };
 }
 
 export async function servicios(actor, empresa, consulta) {

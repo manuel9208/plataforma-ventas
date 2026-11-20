@@ -2,6 +2,7 @@ import { permiteDecimales } from '@plataforma/calculos';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { formatearFechaLarga, formatearMoneda, formatearTelefono } from '../../utils/formato.js';
 import Boton from '../shared/Boton.jsx';
+import Interruptor from '../shared/Interruptor.jsx';
 
 const BOTON = 'min-h-9 px-3 rounded-lg border border-[var(--c-borde)] text-sm disabled:opacity-40';
 
@@ -124,6 +125,13 @@ export default function Carrito({
                             </li>
                           ))}
                         </ul>
+                      )}
+
+                      {s.cargoFin > 0 && (
+                        <p className="mt-1.5 flex justify-between text-xs text-neutral-500">
+                          <span>Financiamiento</span>
+                          <span>{dinero(s.cargoFin)}</span>
+                        </p>
                       )}
 
                       {s.promocion && (
@@ -283,6 +291,20 @@ export default function Carrito({
             <span>{dinero(carrito.ahorro)}</span>
           </div>
         )}
+        {carrito.puedeFinanciar && carrito.tieneServicios && (
+          <div className="pb-2">
+            <Interruptor
+              etiqueta="Financiado"
+              descripcion={
+                carrito.cargoFinanciamiento > 0
+                  ? `Sin anticipo de los servicios. Cargo de ${dinero(carrito.cargoFinanciamiento)} por servicio.`
+                  : 'Sin anticipo de los servicios.'
+              }
+              valor={carrito.financiada}
+              onCambiar={carrito.ponerFinanciada}
+            />
+          </div>
+        )}
         <div className="flex justify-between items-baseline">
           <span className="font-medium">Total</span>
           <span className="text-2xl font-semibold tracking-tight">{dinero(totales.total)}</span>
@@ -298,7 +320,7 @@ export default function Carrito({
         )}
 
         <Boton className="w-full mt-3" disabled={carrito.vacio || carrito.faltaAutorizacion} onClick={onCobrar}>
-          {carrito.tieneServicios ? 'Cobrar abono' : 'Cobrar'}
+          {carrito.tieneServicios ? (carrito.financiada ? 'Cobrar financiado' : 'Cobrar abono') : 'Cobrar'}
         </Boton>
       </div>
     </div>

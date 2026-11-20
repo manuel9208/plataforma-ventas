@@ -204,6 +204,25 @@ export default function ModalImpresoraEquipo({ onCerrar }) {
           </>
         )}
 
+        {cfg.via === 'puente' && (
+          <div className="space-y-3">
+            <Interruptor
+              etiqueta="Imprimir solo al cobrar y al entregar"
+              descripcion="Sale el ticket sin tocar Imprimir. El botón sigue ahí por si hace falta repetirlo."
+              valor={cfg.autoImprimir}
+              onCambiar={(autoImprimir) => setCfg((c) => ({ ...c, autoImprimir }))}
+            />
+            {cfg.autoImprimir && (
+              <Interruptor
+                etiqueta="Pasar a la siguiente nota al terminar"
+                descripcion="Después de imprimir un cobro, la pantalla se queda unos segundos y pasa sola a la nota nueva."
+                valor={cfg.autoSiguiente}
+                onCambiar={(autoSiguiente) => setCfg((c) => ({ ...c, autoSiguiente }))}
+              />
+            )}
+          </div>
+        )}
+
         <Plegable titulo="Opciones avanzadas" abiertaInicial={false}>
           <Interruptor
             etiqueta="Imprimir acentos y la letra ñ"

@@ -127,6 +127,7 @@ export function ticketCliente(venta, { ancho = 80, empresa = '', esCopia = false
         t.fila(s.nombre, fmt.dinero(s.total));
         if (s.promocion) t.texto(`${s.promocion} · ahorro ${fmt.dinero(s.descuento)}`, { sangria: 2 });
         for (const x of s.extras) t.fila(`+ ${x.nombre}`, fmt.dinero(x.total), { sangria: 2 });
+        if (s.cargoFinanciamiento > 0) t.texto(`Incluye financiamiento ${fmt.dinero(s.cargoFinanciamiento)}`, { sangria: 2 });
         t.texto(`Entrega: ${fmt.fechaLarga(s.fechaPrometida)}`, { sangria: 2 });
       }
       t.espacio();
@@ -229,6 +230,62 @@ export function ticketPrueba({ ancho = 80, empresa = '', corte = true, abrirCajo
   t.texto('Texto grande', { ...CENTRO_NEGRITA, grande: true });
   t.linea();
   t.texto('Si la regla de numeros sale completa y no se corta nada a los lados, el ancho es correcto.', CENTRO);
+  t.espacio();
+  return t.resultado();
+}
+
+// ---------- Ticket de entrega: lo entregado hoy y lo que falta ----------
+// ticket: el ticket de entrega de la pantalla + faltan: [{ nombre, articulo, extras, estado, fechaPrometida }]
+export function ticketEntregaTermico(ticket, { ancho = 80, corte = true, empresa = '', fmt }) {
+  const t = crearDocumento(ancho, { cajon: false, cortar: corte });
+  const faltan = ticket.faltan ?? [];
+  const telefono = (x) => (fmt.telefono ? fmt.telefono(x) : x);
+
+  t.texto(empresa, CENTRO_NEGRITA);
+  t.texto(ticket.sucursal, CENTRO);
+  t.texto('ENTREGA', CENTRO);
+  t.texto(ticket.folio, { ...CENTRO_NEGRITA, grande: true });
+  t.texto(fmt.fechaHora(ticket.entregadaEn, ticket.zonaHoraria), CENTRO);
+  t.texto(`${ticket.caja} · ${ticket.entrego}`, CENTRO);
+  if (ticket.cliente) t.texto(`${ticket.cliente.nombre} · ${telefono(ticket.cliente.telefono)}`, CENTRO);
+  t.linea();
+
+  t.texto('ENTREGADO HOY', { negrita: true });
+  let anterior = '';
+  for (const a of ticket.articulos) {
+    const datos = datosDeArticulo(a.articulo);
+    if (datos && datos !== anterior) t.texto(datos, { negrita: true });
+    anterior = datos;
+    t.texto(`[x] ${a.nombre}`);
+    for (const x of a.extras ?? []) t.texto(`+ ${x}`, { sangria: 4 });
+  }
+  t.espacio();
+
+  if (faltan.length) {
+    t.texto(`PENDIENTE POR ENTREGAR (${faltan.length})`, { negrita: true });
+    anterior = '';
+    for (const s of faltan) {
+      const datos = datosDeArticulo(s.articulo);
+      if (datos && datos !== anterior) t.texto(datos, { negrita: true });
+      anterior = datos;
+      t.texto(`[ ] ${s.nombre}`);
+      for (const x of s.extras ?? []) t.texto(`+ ${x.nombre}`, { sangria: 4 });
+      t.texto(`${s.estado === 'listo' ? 'Listo para recoger' : 'En espera'} · Entrega: ${fmt.fechaLarga(s.fechaPrometida)}`, { sangria: 4 });
+    }
+  } else {
+    t.texto('NOTA ENTREGADA COMPLETA', CENTRO_NEGRITA);
+  }
+
+  t.linea();
+  if (ticket.recoge) t.fila('Recogió', ticket.recoge);
+  t.fila('Forma', fmt.etiquetaMetodo(ticket.metodo));
+  if (ticket.autorizo) t.fila('Autorizó', ticket.autorizo);
+  if (ticket.motivo) t.fila('Motivo', ticket.motivo);
+
+  if (ticket.pieEntrega) {
+    t.linea();
+    for (const l of String(ticket.pieEntrega).split('\n')) t.texto(l, CENTRO);
+  }
   t.espacio();
   return t.resultado();
 }

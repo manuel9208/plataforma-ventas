@@ -67,6 +67,9 @@ export default function TicketVenta({ venta, onNueva, esCopia = false, onVolver 
                             <span>{dinero(x.total)}</span>
                           </div>
                         ))}
+                        {s.cargoFinanciamiento > 0 && (
+                          <p className="text-xs text-neutral-500 mt-0.5">Incluye financiamiento {dinero(s.cargoFinanciamiento)}</p>
+                        )}
                         <p className="text-xs text-[var(--c-primario)] font-medium mt-0.5">Entrega: {formatearFechaLarga(s.fechaPrometida)}</p>
                       </div>
                     ))}
@@ -174,7 +177,7 @@ export default function TicketVenta({ venta, onNueva, esCopia = false, onVolver 
       </div>
 
       {venta.repetida && <p className="text-center text-xs text-neutral-400">Esta venta ya estaba registrada; no se cobró de nuevo.</p>}
-      <BotonesImpresion venta={venta} esCopia={esCopia} />
+      <BotonesImpresion venta={venta} esCopia={esCopia} automatico={!esCopia && !venta.repetida} onTerminar={onNueva} />
       {onVolver ? (
         <Boton className="w-full" onClick={onVolver}>
           Volver a la nota

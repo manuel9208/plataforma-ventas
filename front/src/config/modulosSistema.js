@@ -245,6 +245,13 @@ export const PERMISOS_ADICIONALES = [
     roles: ROLES_GESTION,
     defecto: ROLES_GESTION,
   },
+  {
+    clave: 'caja.financiar',
+    etiqueta: 'Financiar una nota (sin anticipo, con cargo por servicio)',
+    grupo: 'Caja',
+    roles: TODOS_LOS_ROLES,
+    defecto: TODOS_LOS_ROLES,
+  },
 ];
 
 // Catálogo único: alimenta el formulario de empleados. El grupo de un módulo es su nombre.

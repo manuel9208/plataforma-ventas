@@ -172,7 +172,10 @@ export default function DetalleNota({ id, accionInicial, onVolver, onOperando })
 
   const entregada = (ticket) => {
     setEntregando(false);
-    setTicketEntrega(ticket);
+    // Lo que sigue pendiente de la nota, para el ticket (lo recién entregado sale en "Entregado hoy")
+    const entregados = new Set(ticket.articulos.map((a) => a.partidaId));
+    const faltan = nota.servicios.filter((s) => s.estado !== 'cancelado' && s.estado !== 'entregado' && !entregados.has(s.partidaId));
+    setTicketEntrega({ ...ticket, faltan });
     // Si ya no queda nada pendiente, no se recarga: la nota pasó a Entregadas
     if (ticket.pendientes > 0) d.recargar();
   };
@@ -228,6 +231,9 @@ export default function DetalleNota({ id, accionInicial, onVolver, onOperando })
                                     + {x.nombre} · {dinero(x.total)}
                                   </p>
                                 ))}
+                                {s.cargoFinanciamiento > 0 && (
+                                  <p className="text-xs text-neutral-500 mt-0.5">Incluye financiamiento · {dinero(s.cargoFinanciamiento)}</p>
+                                )}
                               </div>
                               <EtiquetaEstado estado={s.estado} />
                             </div>
@@ -353,6 +359,7 @@ export default function DetalleNota({ id, accionInicial, onVolver, onOperando })
                 {nota.sucursal} · {nota.caja} · {nota.cajero}
               </p>
               <p className="text-xs text-neutral-400">Recibida {formatearFechaHora(nota.creadaEn, nota.zonaHoraria)}</p>
+              {nota.financiada && <p className="text-xs font-medium text-amber-700 mt-0.5">Nota financiada</p>}
             </div>
 
             <div className="space-y-1 text-sm border-t border-[var(--c-borde)] pt-4">

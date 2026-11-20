@@ -21,6 +21,7 @@ export function venta(v, partidas, pagos, nota = NOTA_VACIA) {
       articuloId: f.venta_articulo_id ?? null,
       comentario: f.comentario ?? null,
       total: Number(f.total),
+      cargoFinanciamiento: Number(f.cargo_financiamiento ?? 0),
       promocion: f.promocion_nombre ?? null,
       descuento: Number(f.descuento ?? 0),
       // Lo que está vacío no se manda, para que no salga en el ticket
@@ -53,6 +54,7 @@ export function venta(v, partidas, pagos, nota = NOTA_VACIA) {
     saldo: estadoPago.saldo,
     tieneServicios: nota.tieneServicios,
     tienePin: nota.tienePin,
+    financiada: nota.financiada ?? false,
     servicios,
     creadaEn: v.creado_en,
     zonaHoraria: v.zona,

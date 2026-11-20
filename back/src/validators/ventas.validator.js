@@ -106,6 +106,7 @@ export const crearVentaBody = z
     descuentos: descuentosManuales.optional(),
     // El total que vio la Caja: el servidor lo compara con el suyo, nunca lo usa para cobrar
     totalMostrado: dinero.optional(),
+    financiada: z.boolean().optional(),
     clienteId: z.string().uuid().optional(),
     clienteNuevo: z.object({ nombre: z.string().trim().min(2).max(80).transform(nombrePropio), telefono }).strict().optional(),
   })

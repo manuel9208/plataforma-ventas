@@ -3,18 +3,18 @@ import { normalizarPagos } from './ventas.js';
 
 // Lo mínimo que debe pagarse al crear la nota: los productos completos, más el porcentaje
 // de los servicios solo si la empresa lo exige como mínimo.
-export function pagoMinimoNota({ totalProductos = 0, totalServicios = 0, porcentaje = 0, esMinimo = false }) {
+export function pagoMinimoNota({ totalProductos = 0, totalServicios = 0, porcentaje = 0, esMinimo = false, financiada = false }) {
   const prodC = aCentavos(totalProductos);
   const servC = aCentavos(totalServicios);
-  const exigidoC = esMinimo ? Math.ceil(Number(((servC * porcentaje) / 100).toFixed(6))) : 0;
+  const exigidoC = esMinimo && !financiada ? Math.ceil(Number(((servC * porcentaje) / 100).toFixed(6))) : 0;
   return aMonto(prodC + exigidoC);
 }
 
 // Lo que la pantalla propone cobrar al inicio (productos completos + porcentaje de servicios)
-export function abonoSugerido({ totalProductos = 0, totalServicios = 0, porcentaje = 0 }) {
+export function abonoSugerido({ totalProductos = 0, totalServicios = 0, porcentaje = 0, financiada = false }) {
   const prodC = aCentavos(totalProductos);
   const servC = aCentavos(totalServicios);
-  return aMonto(prodC + Math.ceil(Number(((servC * porcentaje) / 100).toFixed(6))));
+  return aMonto(prodC + (financiada ? 0 : Math.ceil(Number(((servC * porcentaje) / 100).toFixed(6)))));
 }
 
 // Pagos de una nota con servicios: pueden cubrir menos que el total, pero nunca más,

@@ -17,6 +17,7 @@ let contador = 0;
 const nuevaClave = (prefijo) => `${prefijo}${++contador}`;
 const SIN_PROMOCIONES = [];
 const SIN_MANUAL = { lineas: {}, motivo: '', autorizacion: null };
+const SIN_FINANCIAMIENTO = { disponible: false, cargo: 0 };
 const sumaC = (valores) => valores.reduce((s, v) => s + aCentavos(v), 0);
 
 const nuevoServicio = (servicio, precio, s = {}) => ({
@@ -30,7 +31,10 @@ const nuevoServicio = (servicio, precio, s = {}) => ({
 
 // Productos: un renglón por presentación. Servicios: artículos (unos tenis) con uno o varios servicios cada uno.
 // Los importes salen de las MISMAS funciones que usa el servidor; el servidor vuelve a calcular todo al cobrar.
-export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES) {
+export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiamiento = SIN_FINANCIAMIENTO) {
+  const puedeFinanciar = financiamiento.disponible === true;
+  const cargoFin = Number(financiamiento.cargo) || 0;
+  const [financiarNota, setFinanciarNota] = useState(false);
   const [renglones, setRenglones] = useState([]);
   // [{ clave: 'a#', datos, comentario, servicios: [{ clave: 'v#', servicio, precio, extraIds, fechaPrometida, fechaMostrada }] }]
   const [articulos, setArticulos] = useState([]);
@@ -39,6 +43,8 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES) {
   const [manual, setManual] = useState(SIN_MANUAL);
 
   const numServicios = articulos.reduce((n, g) => n + g.servicios.length, 0);
+  // Financiada solo si la sucursal y el empleado pueden y hay servicios en la nota
+  const financiada = puedeFinanciar && financiarNota && numServicios > 0;
 
   const motivoLimite =
     articulos.length >= MAX_ARTICULOS
@@ -171,6 +177,7 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES) {
   const ponerCliente = (envio, vista) => setCliente(envio ? { envio, vista } : null);
 
   const vaciar = () => {
+    setFinanciarNota(false);
     setRenglones([]);
     setArticulos([]);
     setCliente(null);
@@ -197,7 +204,8 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES) {
         .map((id) => s.servicio.extras.find((x) => x.id === id))
         .filter(Boolean)
         .map((x) => ({ ...x, ...calcularLineaVenta({ precioBase: x.precio, mayoreo: [], cantidad: 1, tasa: x.tasa, incluyeIva }) }));
-      return { ...s, base: principal, extras };
+      const cargo = financiada && cargoFin > 0 ? calcularLineaVenta({ precioBase: cargoFin, mayoreo: [], cantidad: 1, tasa: s.servicio.tasa, incluyeIva }) : null;
+      return { ...s, base: principal, extras, cargo };
     });
 
     // 2) Promociones y descuento manual (misma función que el servidor)
@@ -254,10 +262,12 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES) {
     const serviciosCalc = serviciosBase.map((s, i) => {
       const f = final.servicios[i];
       const extrasC = sumaC(s.extras.map((x) => x.total));
+      const cargoC = s.cargo ? aCentavos(s.cargo.total) : 0;
       return {
         ...s,
-        totalServicio: aMonto(aCentavos(f.total) + extrasC),
-        totalSinPromo: aMonto(aCentavos(s.base.total) + extrasC),
+        cargoFin: s.cargo ? s.cargo.total : 0,
+        totalServicio: aMonto(aCentavos(f.total) + extrasC + cargoC),
+        totalSinPromo: aMonto(aCentavos(s.base.total) + extrasC + cargoC),
         promocion: f.promocionNombre ?? null,
         descuento: f.descuento ?? 0,
         manualPct: manual.lineas[s.clave] ?? null,
@@ -270,7 +280,11 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES) {
       return { clave: g.clave, datos: g.datos, comentario: g.comentario, servicios, total: aMonto(sumaC(servicios.map((s) => s.totalServicio))) };
     });
 
-    const piezas = [...final.productos.map((p) => p.calculada), ...final.servicios.map((s) => s.calculada), ...serviciosBase.flatMap((s) => s.extras)];
+    const piezas = [
+      ...final.productos.map((p) => p.calculada),
+      ...final.servicios.map((s) => s.calculada),
+      ...serviciosBase.flatMap((s) => [...s.extras, ...(s.cargo ? [s.cargo] : [])]),
+    ];
     const totales = piezas.length ? totalesVenta(piezas) : { total: 0, subtotal: null, iva: null, desglosado: false };
     const totalServicios = aMonto(sumaC(serviciosCalc.map((s) => s.totalServicio)));
     const totalProductos = aMonto(aCentavos(totales.total) - aCentavos(totalServicios));
@@ -308,13 +322,17 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES) {
         tieneDescuentoManual && manual.autorizacion ? { motivo: manual.motivo, autorizacion: manual.autorizacion, lineas: lineasManual } : null,
       claves: [...base.map((l) => l.clave), ...serviciosBase.map((s) => s.clave)],
     };
-  }, [renglones, articulos, incluyeIva, promociones, manual]);
+  }, [renglones, articulos, incluyeIva, promociones, manual, financiada, cargoFin]);
 
   return {
     ...calculado,
     vacio: renglones.length === 0 && articulos.length === 0,
     tieneServicios: articulos.length > 0,
     numServicios,
+    puedeFinanciar,
+    financiada,
+    cargoFinanciamiento: cargoFin,
+    ponerFinanciada: setFinanciarNota,
     motivoLimite,
     motivoServicio,
     motivoDuplicar,

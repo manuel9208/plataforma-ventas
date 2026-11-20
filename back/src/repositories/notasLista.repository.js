@@ -81,7 +81,7 @@ export async function obtener(db, empresaId, sucursales, id) {
   const r = await db.query(
     `SELECT v.id, v.sucursal_id, v.folio, v.total, v.subtotal, v.iva, v.precios_incluyen_iva, v.creado_en, v.tiene_servicios,
             v.cancelado, v.ajustado, v.retenido, v.reembolsado,
-            (v.pin_entrega_hash IS NOT NULL) AS tiene_pin,
+            v.financiada, (v.pin_entrega_hash IS NOT NULL) AS tiene_pin,
             s.nombre AS sucursal_nombre, s.direccion AS sucursal_direccion, s.telefono AS sucursal_telefono,
             COALESCE(s.zona_horaria, e.zona_horaria) AS zona, e.nombre AS empresa_nombre,
             cj.nombre AS caja_nombre, u.nombre AS cajero_nombre,
@@ -119,7 +119,7 @@ export async function listarArticulos(db, empresaId, ventaId) {
   const r = await db.query(
     `SELECT vp.id, vp.orden, vp.tipo, vp.nombre, vp.total,
             ps.estado_trabajo, ps.fecha_prometida, ps.fecha_prometida_original, ps.listo_en, ps.tipo_articulo_nombre,
-            ps.venta_articulo_id, va.comentario,
+            ps.venta_articulo_id, va.comentario, ps.cargo_financiamiento,
             pa.marca, pa.talla, pa.color, pa.modelo, pa.textura, pa.descripcion,
             pe.padre_partida_id
      FROM venta_partidas vp

@@ -35,7 +35,10 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
   const catalogo = useCatalogoCaja();
   const servicios = useCatalogoServicios(vendeServicios);
   const promos = usePromocionesCaja();
-  const carrito = useCarrito(catalogo.incluyeIva, promos.promociones);
+  const carrito = useCarrito(catalogo.incluyeIva, promos.promociones, {
+    disponible: config?.puedeFinanciar === true,
+    cargo: config?.financiamientoCargo ?? 0,
+  });
 
   const [codigo, setCodigo] = useState('');
   const [aviso, setAviso] = useState('');
@@ -117,6 +120,7 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
         pagos,
         totalMostrado: carrito.totales.total,
         ...(carrito.descuentoManual ? { descuentos: carrito.descuentoManual } : {}),
+        ...(carrito.financiada ? { financiada: true } : {}),
         ...(cliente ?? {}),
       });
       setTicket(venta);
@@ -270,6 +274,7 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
           total={carrito.totales.total}
           totalProductos={carrito.totalProductos}
           totalServicios={carrito.totalServicios}
+          financiada={carrito.financiada}
           config={config}
           clienteInicial={carrito.cliente}
           enviando={enviando}

@@ -15,7 +15,9 @@ export async function cargarConfig(db, empresaId, sucursalId) {
             ec.descuento_manual_max AS e_dmax, sc.descuento_manual_max AS s_dmax,
             sc.pin_entrega_activo AS s_pin, ec.pin_entrega_activo AS e_pin, e.tipo_negocio AS giro,
             ec.vende_productos AS e_vp, ec.vende_servicios AS e_vs, ec.vista_inicial AS e_vista,
-            sc.vende_productos AS s_vp, sc.vende_servicios AS s_vs, sc.vista_inicial AS s_vista
+            sc.vende_productos AS s_vp, sc.vende_servicios AS s_vs, sc.vista_inicial AS s_vista,
+            ec.financiamiento_activo AS e_fin, sc.financiamiento_activo AS s_fin,
+            ec.financiamiento_cargo AS e_fcargo, sc.financiamiento_cargo AS s_fcargo
      FROM empresas e
      LEFT JOIN empresa_config ec ON ec.empresa_id = e.id
      LEFT JOIN sucursal_config sc ON sc.empresa_id = e.id AND sc.sucursal_id = $2
@@ -29,6 +31,8 @@ export async function cargarConfig(db, empresaId, sucursalId) {
     descuentoManualMax: Number(f.s_dmax ?? f.e_dmax ?? 20),
     camposArticulo: resolverCamposArticulo(f.e_campos, f.s_campos),
     pinEntregaActivo: f.s_pin ?? f.e_pin ?? true,
+    financiamientoActivo: f.s_fin ?? f.e_fin ?? false,
+    financiamientoCargo: Number(f.s_fcargo ?? f.e_fcargo ?? 0),
     ...queSeVende({
       giro: f.giro,
       empresa: { vendeProductos: f.e_vp, vendeServicios: f.e_vs, vistaInicial: f.e_vista },
@@ -162,12 +166,13 @@ export async function sugerencias(db, empresaId, campo, buscar) {
 }
 
 // ---------- Guardar la nota ----------
-export async function marcarNota(db, empresaId, ventaId, pinHash) {
+export async function marcarNota(db, empresaId, ventaId, pinHash, financiada = false) {
   exigirEmpresa(empresaId);
-  await db.query(`UPDATE ventas SET tiene_servicios = TRUE, pin_entrega_hash = $3 WHERE empresa_id = $1 AND id = $2`, [
+  await db.query(`UPDATE ventas SET tiene_servicios = TRUE, pin_entrega_hash = $3, financiada = $4 WHERE empresa_id = $1 AND id = $2`, [
     empresaId,
     ventaId,
     pinHash,
+    financiada,
   ]);
 }
 
@@ -192,9 +197,9 @@ export async function insertarServicio(db, empresaId, s) {
   await db.query(
     `INSERT INTO partida_servicio
        (partida_id, empresa_id, servicio_id, tipo_articulo_id, tipo_articulo_nombre,
-        fecha_prometida, fecha_prometida_original, recibido_por, sucursal_entrega_id, venta_articulo_id)
-     VALUES ($1, $2, $3, $4, $5, $6::date, $6::date, $7, $8, $9)`,
-    [id, empresaId, s.servicioId, s.tipoArticuloId, s.tipoNombre, s.fechaPrometida, s.usuarioId, s.sucursalId, s.articuloId ?? null]
+        fecha_prometida, fecha_prometida_original, recibido_por, sucursal_entrega_id, venta_articulo_id, cargo_financiamiento)
+     VALUES ($1, $2, $3, $4, $5, $6::date, $6::date, $7, $8, $9, $10)`,
+    [id, empresaId, s.servicioId, s.tipoArticuloId, s.tipoNombre, s.fechaPrometida, s.usuarioId, s.sucursalId, s.articuloId ?? null, s.cargoFinanciamiento ?? 0]
   );
 
   const a = s.articulo;
@@ -236,7 +241,7 @@ export async function insertarExtra(db, empresaId, x) {
 export async function cargarNota(db, empresaId, ventaId) {
   exigirEmpresa(empresaId);
   const n = await db.query(
-    `SELECT tiene_servicios, (pin_entrega_hash IS NOT NULL) AS tiene_pin FROM ventas WHERE empresa_id = $1 AND id = $2`,
+    `SELECT tiene_servicios, financiada, (pin_entrega_hash IS NOT NULL) AS tiene_pin FROM ventas WHERE empresa_id = $1 AND id = $2`,
     [empresaId, ventaId]
   );
   const tieneServicios = n.rows[0]?.tiene_servicios ?? false;
@@ -245,7 +250,7 @@ export async function cargarNota(db, empresaId, ventaId) {
   const s = await db.query(
     `SELECT vp.id, vp.orden, vp.tipo, vp.nombre, vp.total, vp.promocion_nombre, vp.descuento,
             ps.estado_trabajo, ps.fecha_prometida, ps.fecha_prometida_original, ps.tipo_articulo_nombre, ps.venta_articulo_id,
-            va.comentario,
+            va.comentario, ps.cargo_financiamiento,
             pa.marca, pa.talla, pa.color, pa.modelo, pa.textura, pa.descripcion,
             pe.padre_partida_id
      FROM venta_partidas vp
@@ -257,5 +262,5 @@ export async function cargarNota(db, empresaId, ventaId) {
      ORDER BY vp.orden`,
     [empresaId, ventaId]
   );
-  return { tieneServicios: true, tienePin: n.rows[0].tiene_pin, servicios: s.rows };
+  return { tieneServicios: true, tienePin: n.rows[0].tiene_pin, financiada: n.rows[0].financiada, servicios: s.rows };
 }

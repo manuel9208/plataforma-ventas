@@ -3,7 +3,7 @@ const PUERTO = 9631;
 const BASE = `http://127.0.0.1:${PUERTO}`;
 const CLAVE = 'impresora_equipo';
 
-const DEFECTO = { via: 'navegador', acentos: true, destino: { tipo: 'usb', nombre: '' } };
+const DEFECTO = { via: 'navegador', acentos: true, autoImprimir: true, autoSiguiente: true, destino: { tipo: 'usb', nombre: '' } };
 
 // La impresora pertenece a ESTA computadora, por eso se guarda aquí y no en la base de datos
 export function leerConfigImpresora() {
