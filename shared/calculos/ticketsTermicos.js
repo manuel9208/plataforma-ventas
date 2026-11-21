@@ -167,6 +167,12 @@ export function ticketCliente(venta, { ancho = 80, empresa = '', esCopia = false
     t.texto('Lo necesitas para recoger tus articulos.', CENTRO);
   }
 
+  // Puntos que ganó con esta compra (solo en el ticket recién cobrado)
+  if (!esCopia && venta.puntos?.ganados > 0) {
+    t.linea();
+    t.texto(`Ganaste ${venta.puntos.ganados} ${venta.puntos.ganados === 1 ? 'punto' : 'puntos'}`, CENTRO_NEGRITA);
+  }
+
   if (venta.pieRecepcion) {
     t.linea();
     for (const l of String(venta.pieRecepcion).split('\n')) t.texto(l, CENTRO);
@@ -184,7 +190,10 @@ export function ticketArea(venta, { ancho = 80, corte = true, fmt }) {
   t.texto('AREA DE LIMPIEZA', CENTRO_NEGRITA);
   t.texto(venta.folio, { ...CENTRO_NEGRITA, grande: true });
   t.texto(`Recibida: ${fmt.fechaHora(venta.creadaEn, venta.zonaHoraria)}`, CENTRO);
-  if (venta.cliente) t.texto(venta.cliente.nombre, CENTRO);
+  if (venta.cliente) {
+    t.texto(venta.cliente.nombre, CENTRO);
+    if (venta.cliente.telefono) t.texto(fmt.telefono ? fmt.telefono(venta.cliente.telefono) : venta.cliente.telefono, CENTRO);
+  }
   t.linea();
 
   for (const g of grupos) {
@@ -281,6 +290,11 @@ export function ticketEntregaTermico(ticket, { ancho = 80, corte = true, empresa
   t.fila('Forma', fmt.etiquetaMetodo(ticket.metodo));
   if (ticket.autorizo) t.fila('Autorizó', ticket.autorizo);
   if (ticket.motivo) t.fila('Motivo', ticket.motivo);
+
+  if (ticket.puntos?.ganados > 0) {
+    t.linea();
+    t.texto(`Ganaste ${ticket.puntos.ganados} ${ticket.puntos.ganados === 1 ? 'punto' : 'puntos'}`, CENTRO_NEGRITA);
+  }
 
   if (ticket.pieEntrega) {
     t.linea();

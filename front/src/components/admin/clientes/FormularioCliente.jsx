@@ -2,11 +2,12 @@ import { useState } from 'react';
 import Modal from '../../shared/Modal.jsx';
 import Boton from '../../shared/Boton.jsx';
 import Campo from '../../shared/Campo.jsx';
+import CampoCumpleanos from '../../shared/CampoCumpleanos.jsx';
 import Interruptor from '../../shared/Interruptor.jsx';
 import Plegable from '../../shared/Plegable.jsx';
 import MensajeError from '../../shared/MensajeError.jsx';
 
-const ETIQUETAS = { nombre: 'Nombre', telefono: 'Teléfono', correo: 'Correo', notas: 'Notas' };
+const ETIQUETAS = { nombre: 'Nombre', telefono: 'Teléfono', correo: 'Correo', notas: 'Notas', cumpleanos: 'Cumpleaños' };
 const soloDigitos = (v, max) => v.replace(/\D/g, '').slice(0, max);
 
 export default function FormularioCliente({ cliente, onGuardar, onCerrar }) {
@@ -15,6 +16,7 @@ export default function FormularioCliente({ cliente, onGuardar, onCerrar }) {
     nombre: cliente?.nombre ?? '',
     telefono: cliente?.telefono ?? '',
     correo: cliente?.correo ?? '',
+    cumple: cliente?.cumpleanos ?? null,
     notas: cliente?.notas ?? '',
     aceptaWhatsapp: cliente?.aceptaWhatsapp ?? false,
   }));
@@ -36,6 +38,8 @@ export default function FormularioCliente({ cliente, onGuardar, onCerrar }) {
         if (valor) datos[clave] = valor;
         else if (editando) datos[clave] = null;
       }
+      if (f.cumple) datos.cumpleanos = f.cumple;
+      else if (editando) datos.cumpleanos = null;
       await onGuardar(datos);
       onCerrar();
     } catch (err) {
@@ -64,14 +68,27 @@ export default function FormularioCliente({ cliente, onGuardar, onCerrar }) {
       <form id="form-cliente" onSubmit={enviar} className="space-y-4">
         <Campo etiqueta="Teléfono *" type="tel" inputMode="numeric" placeholder="10 dígitos" value={f.telefono} onChange={(e) => set('telefono', soloDigitos(e.target.value, 13))} required />
         <Campo etiqueta="Nombre *" value={f.nombre} onChange={(e) => set('nombre', e.target.value)} required />
+        <Campo
+          etiqueta="Correo"
+          type="email"
+          autoCapitalize="none"
+          value={f.correo}
+          onChange={(e) => set('correo', e.target.value)}
+          ayuda="Con el correo, el cumpleaños y el PIN el perfil del cliente queda completo."
+        />
+        <CampoCumpleanos valor={f.cumple} onCambio={(v) => set('cumple', v)} ayuda="Solo día y mes, sin año." />
+        {editando && (
+          <p className="text-xs text-neutral-500">
+            PIN: {cliente.tienePin ? 'ya tiene' : 'todavía no tiene (se genera desde la tarjeta del cliente)'}.
+          </p>
+        )}
         <Interruptor
           etiqueta="Acepta avisos por WhatsApp"
           descripcion="Enciéndelo solo si el cliente aceptó recibirlos. Se guarda la fecha en que aceptó."
           valor={f.aceptaWhatsapp}
           onCambiar={(v) => set('aceptaWhatsapp', v)}
         />
-        <Plegable titulo="Más datos" abiertaInicial={!!(f.correo || f.notas)}>
-          <Campo etiqueta="Correo (opcional)" type="email" value={f.correo} onChange={(e) => set('correo', e.target.value)} autoCapitalize="none" />
+        <Plegable titulo="Notas" abiertaInicial={!!f.notas}>
           <Campo etiqueta="Notas (opcional)" value={f.notas} onChange={(e) => set('notas', e.target.value)} />
         </Plegable>
         <MensajeError error={error} detalles={detalles} etiquetas={ETIQUETAS} />

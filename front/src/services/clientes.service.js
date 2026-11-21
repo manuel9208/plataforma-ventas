@@ -8,3 +8,8 @@ export const actualizar = (id, datos) => apiFetch(`/clientes/${id}`, { metodo: '
 export const articulos = (id) => apiFetch(`/clientes/${id}/articulos`);
 export const bajaArticulo = (id, articuloId, motivo) =>
   apiFetch(`/clientes/${id}/articulos/${articuloId}/baja`, { metodo: 'POST', cuerpo: { motivo } });
+
+export const generarPin = (id) => apiFetch(`/clientes/${id}/pin`, { metodo: 'POST', cuerpo: {} });
+
+export const puntos = (id) => apiFetch(`/clientes/${id}/puntos`);
+export const ajustarPuntos = (id, cuerpo) => apiFetch(`/clientes/${id}/puntos/ajustes`, { metodo: 'POST', cuerpo });

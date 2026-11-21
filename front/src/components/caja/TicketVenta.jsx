@@ -5,6 +5,7 @@ import { formatearFechaHora, formatearFechaLarga, formatearMoneda } from '../../
 import Boton from '../shared/Boton.jsx';
 import { agruparServicios } from './agruparServicios.js';
 import BotonesImpresion from './BotonesImpresion.jsx';
+import AvisoPuntos from '../shared/AvisoPuntos.jsx';
 
 const ESTADO_PAGO = { pendiente: 'Sin pago', abonada: 'Abonada', pagada: 'Pagada' };
 
@@ -169,6 +170,12 @@ export default function TicketVenta({ venta, onNueva, esCopia = false, onVolver 
         )}
         {esNota && venta.tienePin && !venta.pinEntrega && (
           <p className="mt-4 text-center text-xs text-neutral-400">El PIN ya se entregó y no se puede volver a mostrar.</p>
+        )}
+
+        {!esCopia && venta.puntos && (
+          <div className="mt-4">
+            <AvisoPuntos puntos={venta.puntos} />
+          </div>
         )}
 
         {venta.pieRecepcion && (

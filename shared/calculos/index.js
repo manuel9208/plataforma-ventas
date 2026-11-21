@@ -22,3 +22,8 @@ export * from './promociones.js';
 export * from './descuentos.js';
 export * from './ticketsTermicos.js';
 export * from './escpos.js';
+export * from './perfilCliente.js';
+export * from './puntos.js';
+export * from './periodos.js';
+export * from './reporteVentas.js';
+export * from './estadisticasVentas.js';

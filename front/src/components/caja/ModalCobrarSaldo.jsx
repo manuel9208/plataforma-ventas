@@ -145,10 +145,10 @@ export default function ModalCobrarSaldo({ saldo, enviando, error, onConfirmar, 
 
         {(modo === 'tarjeta' || modo === 'transferencia') && monto > 0 && (
           <Campo
-            etiqueta={modo === 'transferencia' ? 'Referencia *' : 'Referencia (opcional)'}
+            etiqueta={modo === 'transferencia' ? 'Clave de rastreo (opcional)' : 'Referencia (opcional)'}
             value={referencia}
             onChange={(e) => setReferencia(e.target.value)}
-            ayuda={modo === 'transferencia' ? 'Número de operación o clave de rastreo' : 'Últimos dígitos o folio del voucher'}
+            ayuda={modo === 'transferencia' ? 'Si la tienes, anótala. Puedes continuar sin ella.' : 'Últimos dígitos o folio del voucher'}
           />
         )}
 
@@ -199,7 +199,7 @@ export default function ModalCobrarSaldo({ saldo, enviando, error, onConfirmar, 
                     />
                   ) : (
                     <Campo
-                      etiqueta={f.forma === 'transferencia' ? 'Referencia *' : 'Referencia'}
+                      etiqueta={f.forma === 'transferencia' ? 'Clave de rastreo' : 'Referencia'}
                       value={f.referencia}
                       onChange={(e) => cambiarFila(f._k, { referencia: e.target.value })}
                     />

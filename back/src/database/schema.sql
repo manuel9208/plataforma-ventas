@@ -1395,3 +1395,81 @@ ALTER TABLE sucursal_config ADD COLUMN IF NOT EXISTS financiamiento_activo BOOLE
 ALTER TABLE sucursal_config ADD COLUMN IF NOT EXISTS financiamiento_cargo NUMERIC(12,2) CHECK (financiamiento_cargo >= 0 AND financiamiento_cargo <= 9999.99);
 ALTER TABLE ventas ADD COLUMN IF NOT EXISTS financiada BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE partida_servicio ADD COLUMN IF NOT EXISTS cargo_financiamiento NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (cargo_financiamiento >= 0);
+
+-- ============ BLOQUE 37: PERFIL DEL CLIENTE (CUMPLEANOS Y PIN) ============
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cumple_mes SMALLINT CHECK (cumple_mes BETWEEN 1 AND 12);
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cumple_dia SMALLINT CHECK (cumple_dia BETWEEN 1 AND 31);
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS pin_hash TEXT;
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS pin_creado_en TIMESTAMPTZ;
+
+-- ============ BLOQUE 38: CUENTA DEL CLIENTE (AVISO DE PRIVACIDAD) ============
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS aviso_privacidad_en TIMESTAMPTZ;
+
+-- ============ BLOQUE 39: PUNTOS DE FIDELIDAD ============
+ALTER TABLE empresa_config
+ADD COLUMN IF NOT EXISTS puntos_ganar_productos BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS puntos_monto_productos NUMERIC(12,2) NOT NULL DEFAULT 100 CHECK (puntos_monto_productos > 0),
+ADD COLUMN IF NOT EXISTS puntos_ganados_productos NUMERIC(8,2) NOT NULL DEFAULT 10 CHECK (puntos_ganados_productos >= 0),
+ADD COLUMN IF NOT EXISTS puntos_ganar_servicios BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS puntos_monto_servicios NUMERIC(12,2) NOT NULL DEFAULT 100 CHECK (puntos_monto_servicios > 0),
+ADD COLUMN IF NOT EXISTS puntos_ganados_servicios NUMERIC(8,2) NOT NULL DEFAULT 10 CHECK (puntos_ganados_servicios >= 0),
+ADD COLUMN IF NOT EXISTS puntos_valor NUMERIC(8,2) NOT NULL DEFAULT 0.50 CHECK (puntos_valor > 0),
+ADD COLUMN IF NOT EXISTS puntos_promo_da BOOLEAN NOT NULL DEFAULT TRUE,
+ADD COLUMN IF NOT EXISTS puntos_canjear_productos BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS puntos_canjear_servicios BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS puntos_canje_en_promo BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS puntos_tope_canje NUMERIC(5,2) NOT NULL DEFAULT 50 CHECK (puntos_tope_canje >= 0 AND puntos_tope_canje <= 100),
+ADD COLUMN IF NOT EXISTS puntos_minimo_canje NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (puntos_minimo_canje >= 0),
+ADD COLUMN IF NOT EXISTS puntos_caducidad TEXT NOT NULL DEFAULT 'nunca' CHECK (puntos_caducidad IN ('nunca', 'meses', 'fecha')),
+ADD COLUMN IF NOT EXISTS puntos_caducidad_meses NUMERIC(5,2) NOT NULL DEFAULT 12 CHECK (puntos_caducidad_meses >= 1 AND puntos_caducidad_meses <= 120),
+ADD COLUMN IF NOT EXISTS puntos_caducidad_fecha TEXT CHECK (puntos_caducidad_fecha ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'),
+ADD COLUMN IF NOT EXISTS puntos_exigir_aviso BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE sucursal_config
+ADD COLUMN IF NOT EXISTS puntos_ganar_productos BOOLEAN,
+ADD COLUMN IF NOT EXISTS puntos_monto_productos NUMERIC(12,2) CHECK (puntos_monto_productos > 0),
+ADD COLUMN IF NOT EXISTS puntos_ganados_productos NUMERIC(8,2) CHECK (puntos_ganados_productos >= 0),
+ADD COLUMN IF NOT EXISTS puntos_ganar_servicios BOOLEAN,
+ADD COLUMN IF NOT EXISTS puntos_monto_servicios NUMERIC(12,2) CHECK (puntos_monto_servicios > 0),
+ADD COLUMN IF NOT EXISTS puntos_ganados_servicios NUMERIC(8,2) CHECK (puntos_ganados_servicios >= 0),
+ADD COLUMN IF NOT EXISTS puntos_valor NUMERIC(8,2) CHECK (puntos_valor > 0),
+ADD COLUMN IF NOT EXISTS puntos_promo_da BOOLEAN,
+ADD COLUMN IF NOT EXISTS puntos_canjear_productos BOOLEAN,
+ADD COLUMN IF NOT EXISTS puntos_canjear_servicios BOOLEAN,
+ADD COLUMN IF NOT EXISTS puntos_canje_en_promo BOOLEAN,
+ADD COLUMN IF NOT EXISTS puntos_tope_canje NUMERIC(5,2) CHECK (puntos_tope_canje >= 0 AND puntos_tope_canje <= 100),
+ADD COLUMN IF NOT EXISTS puntos_minimo_canje NUMERIC(10,2) CHECK (puntos_minimo_canje >= 0),
+ADD COLUMN IF NOT EXISTS puntos_caducidad TEXT CHECK (puntos_caducidad IN ('nunca', 'meses', 'fecha')),
+ADD COLUMN IF NOT EXISTS puntos_caducidad_meses NUMERIC(5,2) CHECK (puntos_caducidad_meses >= 1 AND puntos_caducidad_meses <= 120),
+ADD COLUMN IF NOT EXISTS puntos_caducidad_fecha TEXT CHECK (puntos_caducidad_fecha ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'),
+ADD COLUMN IF NOT EXISTS puntos_exigir_aviso BOOLEAN;
+
+CREATE TABLE IF NOT EXISTS puntos_movimientos (
+id UUID NOT NULL DEFAULT gen_random_uuid(),
+empresa_id BIGINT NOT NULL REFERENCES empresas(id),
+cliente_id UUID NOT NULL,
+venta_id UUID,
+sucursal_id BIGINT,
+tipo TEXT NOT NULL CHECK (tipo IN ('ganado', 'canje', 'reversa', 'ajuste')),
+origen TEXT NOT NULL CHECK (origen IN ('venta', 'entrega', 'canje', 'manual')),
+puntos INTEGER NOT NULL,
+base NUMERIC(12,2) NOT NULL DEFAULT 0,
+vence_en DATE,
+motivo TEXT,
+clave TEXT NOT NULL,
+usuario_id BIGINT,
+creado_en TIMESTAMPTZ NOT NULL DEFAULT now(),
+PRIMARY KEY (id),
+UNIQUE (id, empresa_id),
+UNIQUE (empresa_id, clave),
+FOREIGN KEY (cliente_id, empresa_id) REFERENCES clientes(id, empresa_id),
+FOREIGN KEY (venta_id, empresa_id) REFERENCES ventas(id, empresa_id),
+FOREIGN KEY (usuario_id, empresa_id) REFERENCES usuarios(id, empresa_id),
+CHECK ((tipo = 'ganado' AND puntos > 0) OR (tipo = 'canje' AND puntos < 0) OR (tipo = 'reversa' AND puntos <= 0) OR tipo = 'ajuste')
+);
+CREATE INDEX IF NOT EXISTS idx_puntos_cliente ON puntos_movimientos (empresa_id, cliente_id, creado_en);
+CREATE INDEX IF NOT EXISTS idx_puntos_venta ON puntos_movimientos (empresa_id, venta_id, origen);
+
+-- ============ BLOQUE 40: META DE CRECIMIENTO (REPORTES) ============
+ALTER TABLE empresa_config ADD COLUMN IF NOT EXISTS meta_crecimiento NUMERIC(5,2) NOT NULL DEFAULT 5 CHECK (meta_crecimiento >= 0 AND meta_crecimiento <= 100);
+ALTER TABLE sucursal_config ADD COLUMN IF NOT EXISTS meta_crecimiento NUMERIC(5,2) CHECK (meta_crecimiento >= 0 AND meta_crecimiento <= 100);

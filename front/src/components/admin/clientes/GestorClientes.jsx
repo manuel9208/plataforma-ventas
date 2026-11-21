@@ -1,21 +1,35 @@
 import { useState } from 'react';
 import * as svc from '../../../services/clientes.service.js';
+import { useAuth } from '../../../context/AuthContext.jsx';
+import { tienePermiso } from '../../../utils/permisos.js';
 import { formatearTelefono } from '../../../utils/formato.js';
+import { textoCumple } from '../../../utils/cumpleanos.js';
 import { useClientes } from './useClientes.js';
 import FormularioCliente from './FormularioCliente.jsx';
 import Boton from '../../shared/Boton.jsx';
 import Insignia from '../../shared/Insignia.jsx';
 import ConfirmModal from '../../shared/ConfirmModal.jsx';
 import MensajeError from '../../shared/MensajeError.jsx';
+import ModalPinCliente from '../../shared/ModalPinCliente.jsx';
+import ModalPuntosCliente from './ModalPuntosCliente.jsx';
 
 const INPUT = 'min-h-12 px-4 rounded-2xl bg-white border border-[var(--c-borde)] outline-none transition focus:border-[var(--c-acento)] focus:ring-4 focus:ring-[var(--c-acento)]/20';
 const SELECT = 'flex-1 min-h-11 px-3 rounded-2xl bg-white border border-[var(--c-borde)] text-sm outline-none focus:border-[var(--c-acento)]';
 
 export default function GestorClientes() {
+  const { usuario, tieneModulo } = useAuth();
+  const conPuntos = tieneModulo('promociones');
   const h = useClientes();
+  const esGlobal = usuario.rol === 'adminglobal';
+  const puedeRestablecer = tienePermiso(usuario.permisos, 'clientes.restablecer_pin');
+
   const [formulario, setFormulario] = useState(null); // null cerrado, {} nuevo, objeto = cliente a editar
   const [abriendo, setAbriendo] = useState(null);
   const [confirmar, setConfirmar] = useState(null);
+  const [confirmarPin, setConfirmarPin] = useState(null);
+  const [generando, setGenerando] = useState(null);
+  const [pinNuevo, setPinNuevo] = useState(null); // { pin, nombre, reemplazo }
+  const [verPuntos, setVerPuntos] = useState(null);
   const [procesando, setProcesando] = useState(false);
   const [errorAccion, setErrorAccion] = useState('');
 
@@ -47,6 +61,23 @@ export default function GestorClientes() {
     }
   };
 
+  const generarPin = async (c) => {
+    setErrorAccion('');
+    setGenerando(c.id);
+    try {
+      const r = await h.generarPin(c.id);
+      setPinNuevo({ pin: r.pin, nombre: c.nombre, reemplazo: r.reemplazo });
+    } catch (e) {
+      setErrorAccion(e.message);
+    } finally {
+      setGenerando(null);
+      setConfirmarPin(null);
+    }
+  };
+
+  // Crear el primero es directo; restablecer pide confirmar (el anterior deja de servir)
+  const pedirPin = (c) => (c.tienePin ? setConfirmarPin(c) : generarPin(c));
+
   return (
     <>
       <div className="flex flex-col sm:flex-row gap-3 mb-3">
@@ -58,12 +89,7 @@ export default function GestorClientes() {
           placeholder="Buscar por teléfono"
           className={`sm:w-64 ${INPUT}`}
         />
-        <input
-          value={h.nombre}
-          onChange={(e) => h.setNombre(e.target.value)}
-          placeholder="Buscar por nombre"
-          className={`flex-1 ${INPUT}`}
-        />
+        <input value={h.nombre} onChange={(e) => h.setNombre(e.target.value)} placeholder="Buscar por nombre" className={`flex-1 ${INPUT}`} />
         <Boton onClick={() => setFormulario({})}>Nuevo</Boton>
       </div>
 
@@ -72,6 +98,11 @@ export default function GestorClientes() {
           <option value="activos">Activos</option>
           <option value="inactivos">Dados de baja</option>
           <option value="todos">Todos</option>
+        </select>
+        <select aria-label="Perfil" value={h.perfil} onChange={(e) => h.setPerfil(e.target.value)} className={SELECT}>
+          <option value="todos">Todos los perfiles</option>
+          <option value="incompleto">Perfil incompleto</option>
+          <option value="completo">Perfil completo</option>
         </select>
       </div>
 
@@ -94,7 +125,15 @@ export default function GestorClientes() {
                   <p className="font-semibold truncate">{c.nombre}</p>
                   <p className="text-sm text-neutral-500">{formatearTelefono(c.telefono)}</p>
                   {c.correo && <p className="text-xs text-neutral-400 truncate">{c.correo}</p>}
+                  {c.cumpleanos && <p className="text-xs text-neutral-400">Cumpleaños: {textoCumple(c.cumpleanos)}</p>}
                   <p className="text-xs text-neutral-400 mt-1">{c.aceptaWhatsapp ? 'Acepta avisos por WhatsApp' : 'Sin avisos por WhatsApp'}</p>
+                  {c.perfil.completo ? (
+                    <span className="mt-2 inline-block rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold px-2.5 py-1">Perfil completo</span>
+                  ) : (
+                    <span className="mt-2 inline-block rounded-full bg-amber-50 text-amber-800 text-xs font-semibold px-2.5 py-1">
+                      Falta: {c.perfil.falta.join(', ')}
+                    </span>
+                  )}
                 </div>
                 <Insignia activo={c.activo} textoInactivo="De baja" />
               </div>
@@ -106,6 +145,16 @@ export default function GestorClientes() {
                   {c.activo ? 'Dar de baja' : 'Reactivar'}
                 </Boton>
               </div>
+              {c.activo && !esGlobal && (!c.tienePin || puedeRestablecer) && (
+                <Boton compacto variante="secundario" className="w-full mt-2" cargando={generando === c.id} onClick={() => pedirPin(c)}>
+                  {c.tienePin ? 'Restablecer PIN' : 'Generar PIN'}
+                </Boton>
+              )}
+              {conPuntos && c.activo && (
+                <Boton compacto variante="secundario" className="w-full mt-2" onClick={() => setVerPuntos(c)}>
+                  Puntos
+                </Boton>
+              )}
             </li>
           ))}
         </ul>
@@ -148,6 +197,21 @@ export default function GestorClientes() {
         onConfirmar={cambiarEstado}
         onCancelar={() => setConfirmar(null)}
       />
+
+      <ConfirmModal
+        abierto={!!confirmarPin}
+        titulo="Restablecer PIN"
+        mensaje={`Se creará un PIN nuevo para "${confirmarPin?.nombre}" y el anterior dejará de servir. Se mostrará una sola vez.`}
+        textoConfirmar="Restablecer"
+        peligro
+        cargando={generando === confirmarPin?.id}
+        onConfirmar={() => generarPin(confirmarPin)}
+        onCancelar={() => setConfirmarPin(null)}
+      />
+
+      {verPuntos && <ModalPuntosCliente key={verPuntos.id} cliente={verPuntos} onCerrar={() => setVerPuntos(null)} />}
+
+      {pinNuevo && <ModalPinCliente pin={pinNuevo.pin} nombre={pinNuevo.nombre} reemplazo={pinNuevo.reemplazo} onCerrar={() => setPinNuevo(null)} />}
     </>
   );
 }

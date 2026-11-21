@@ -30,6 +30,7 @@ import * as clientesRepo from '../repositories/clientes.repository.js';
 import * as listaRepo from '../repositories/notasLista.repository.js';
 import * as configRepo from '../repositories/configuracion.repository.js';
 import { guardarArticulosDeCliente } from './clienteArticulos.service.js';
+import { otorgarSeguro } from './puntos.service.js';
 import { venta as serializarVenta } from '../serializers/ventas.serializer.js';
 
 const MAX_DIAS_PROMESA = 365;
@@ -403,6 +404,19 @@ export async function crear(actor, datos, ip) {
 
       await repo.insertarPagos(db, e, { id: datos.id, turnoId: t.id, cajaId: t.caja_id, usuarioId: actor.id }, pagos);
 
+      // Puntos de los productos (los de servicios se ganan al entregar). Si falla, el cobro no se detiene.
+      const puntos = await otorgarSeguro(db, {
+        empresaId: e,
+        sucursalId,
+        clienteId,
+        tipo: 'productos',
+        origen: 'venta',
+        ventaId: datos.id,
+        clave: `venta:${datos.id}`,
+        usuarioId: actor.id,
+        lineas: productos.map((p) => ({ base: p.total, descuento: p.descuento ?? 0 })),
+      });
+
       await registrarBitacora(db, {
         empresaId: e,
         sucursalId,
@@ -426,7 +440,7 @@ export async function crear(actor, datos, ip) {
         ip,
       });
 
-      return { ...(await cargarVenta(db, e, datos.id)), repetida: false, pinEntrega: conPin ? pin : null };
+      return { ...(await cargarVenta(db, e, datos.id)), repetida: false, pinEntrega: conPin ? pin : null, puntos };
     });
   } catch (err) {
     // Dos envíos simultáneos con el mismo id: gana uno, el otro recibe la misma venta

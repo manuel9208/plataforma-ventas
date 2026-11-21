@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { formatearFechaHora } from '../../utils/formato.js';
 import Boton from '../shared/Boton.jsx';
 import BotonesImpresion from './BotonesImpresion.jsx';
+import AvisoPuntos from '../shared/AvisoPuntos.jsx';
 
 // Ticket de entrega. Nunca muestra el PIN.
 export default function TicketEntrega({ ticket, onCerrar }) {
@@ -86,6 +87,12 @@ export default function TicketEntrega({ ticket, onCerrar }) {
                 ))}
               </ul>
             )}
+          </div>
+        )}
+
+        {ticket.puntos && (
+          <div className="mt-4">
+            <AvisoPuntos puntos={ticket.puntos} />
           </div>
         )}
 

@@ -1,9 +1,15 @@
 const BASE = import.meta.env.VITE_API_URL;
 const SLUG = import.meta.env.VITE_EMPRESA_SLUG;
 
-let alExpirar = () => {};
+// Cada tipo de sesión guarda su token con su propia clave: la del cliente nunca se mezcla con la del empleado
+export const CLAVE_TOKEN = { empleado: 'token', cliente: 'token_cliente' };
+
+const alExpirar = { empleado: () => {}, cliente: () => {} };
 export const configurarAlExpirar = (fn) => {
-  alExpirar = fn;
+  alExpirar.empleado = fn;
+};
+export const configurarAlExpirarCliente = (fn) => {
+  alExpirar.cliente = fn;
 };
 
 export class ErrorApi extends Error {
@@ -14,7 +20,8 @@ export class ErrorApi extends Error {
   }
 }
 
-export async function apiFetch(ruta, { metodo = 'GET', cuerpo, query } = {}) {
+// sesion: 'empleado' (por defecto) o 'cliente'
+export async function apiFetch(ruta, { metodo = 'GET', cuerpo, query, sesion = 'empleado' } = {}) {
   const url = new URL(BASE + ruta);
   if (query) {
     Object.entries(query).forEach(([k, v]) => {
@@ -22,7 +29,7 @@ export async function apiFetch(ruta, { metodo = 'GET', cuerpo, query } = {}) {
     });
   }
 
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem(CLAVE_TOKEN[sesion]);
   const headers = { 'X-Empresa-Slug': SLUG };
   if (token) headers.Authorization = `Bearer ${token}`;
   if (cuerpo) headers['Content-Type'] = 'application/json';
@@ -36,7 +43,7 @@ export async function apiFetch(ruta, { metodo = 'GET', cuerpo, query } = {}) {
 
   const datos = await res.json().catch(() => null);
   if (!res.ok) {
-    if (res.status === 401 && token) alExpirar();
+    if (res.status === 401 && token) alExpirar[sesion]();
     throw new ErrorApi(res.status, datos?.error || 'Error inesperado', datos?.detalles);
   }
   return datos;

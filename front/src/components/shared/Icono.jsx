@@ -1,4 +1,3 @@
-import React from 'react';
 const ICONOS = {
   usuarios: (
     <>
@@ -67,6 +66,12 @@ const ICONOS = {
       <circle cx="16" cy="6" r="2" />
       <circle cx="10" cy="12" r="2" />
       <circle cx="18" cy="18" r="2" />
+    </>
+  ),
+  reportes: (
+    <>
+      <path d="M3 3v18h18" />
+      <path d="m7 15 4-4 3 3 5-6" />
     </>
   ),
 };

@@ -1,16 +1,23 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { useCliente } from '../../context/ClienteContext.jsx';
 import { rutaInicio } from '../../utils/permisos.js';
 import Boton from '../shared/Boton.jsx';
 import { useSucursalPublica } from './useSucursalPublica.js';
 import { useCatalogoPublico } from './useCatalogoPublico.js';
 import TarjetaCatalogo from './TarjetaCatalogo.jsx';
+import ModalEntrar from './ModalEntrar.jsx';
 
 const CONTENEDOR = 'w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-10';
+const BOTON_ENTRAR =
+  'px-5 py-2.5 rounded-full bg-[var(--c-acento)] text-[#241a05] text-sm font-semibold shadow-[0_8px_20px_-8px_rgba(201,162,92,0.8)] hover:brightness-105 transition';
 
 export default function Inicio() {
   const { empresa, usuario } = useAuth();
+  const { cliente } = useCliente();
+  const navegar = useNavigate();
+  const [eligiendo, setEligiendo] = useState(false);
   const esLimpieza = empresa.tipoNegocio === 'limpieza';
   const [tipo, setTipo] = useState(esLimpieza ? 'servicios' : 'productos');
   const s = useSucursalPublica();
@@ -25,12 +32,19 @@ export default function Inicio() {
         <div className={`relative ${CONTENEDOR}`}>
           <div className="h-16 flex items-center justify-between gap-3">
             <span className="font-semibold tracking-tight truncate">{empresa.nombre}</span>
-            <Link
-              to={usuario ? rutaInicio(usuario) : '/login'}
-              className="px-5 py-2.5 rounded-full bg-[var(--c-acento)] text-[#241a05] text-sm font-semibold shadow-[0_8px_20px_-8px_rgba(201,162,92,0.8)] hover:brightness-105 transition"
-            >
-              {usuario ? 'Mi panel' : 'Iniciar sesión'}
-            </Link>
+            {usuario && !cliente ? (
+              <Link to={rutaInicio(usuario)} className={BOTON_ENTRAR}>
+                Mi panel
+              </Link>
+            ) : !usuario && cliente ? (
+              <Link to="/mi-cuenta" className={BOTON_ENTRAR}>
+                Mi cuenta
+              </Link>
+            ) : (
+              <button type="button" onClick={() => setEligiendo(true)} className={BOTON_ENTRAR}>
+                Entrar
+              </button>
+            )}
           </div>
 
           <div className="py-10 sm:py-16 max-w-2xl">
@@ -136,6 +150,17 @@ export default function Inicio() {
           </>
         )}
       </main>
+
+      {eligiendo && (
+        <ModalEntrar
+          onCerrar={() => setEligiendo(false)}
+          onElegir={(tipo) => {
+            setEligiendo(false);
+            if (tipo === 'empleado') navegar(usuario ? rutaInicio(usuario) : '/login');
+            else navegar(cliente ? '/mi-cuenta' : '/cliente');
+          }}
+        />
+      )}
     </div>
   );
 }

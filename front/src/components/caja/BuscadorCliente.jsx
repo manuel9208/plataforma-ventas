@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { buscarClientes } from '../../services/caja.service.js';
 import { formatearTelefono } from '../../utils/formato.js';
 import Campo from '../shared/Campo.jsx';
+import { vistaCliente } from './vistaCliente.js';
 
 const soloDigitos = (v) => v.replace(/\D/g, '').slice(0, 10);
 
@@ -40,7 +41,7 @@ export default function BuscadorCliente({ onCambio, inicial = null }) {
 
   // onCambio(envio, vista): envio va al servidor; vista es para mostrar al cajero
   const avisar = (tel, nom, cliente) => {
-    if (cliente) onCambio({ clienteId: cliente.id }, { id: cliente.id, nombre: cliente.nombre, telefono: cliente.telefono });
+    if (cliente) onCambio({ clienteId: cliente.id }, vistaCliente(cliente));
     else if (tel.length === 10 && nom.trim().length >= 2)
       onCambio({ clienteNuevo: { nombre: nom.trim(), telefono: tel } }, { nombre: nom.trim(), telefono: tel });
     else onCambio(null, null);

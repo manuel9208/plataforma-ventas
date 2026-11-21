@@ -57,7 +57,7 @@ export function normalizarPagos(total, pagos) {
     if (!FORMAS_PAGO.includes(p.forma)) throw new Error('Forma de pago inválida');
     const montoC = aCentavos(p.monto);
     if (montoC <= 0) throw new Error('Cada pago debe ser mayor a cero');
-    if (p.forma === 'transferencia' && !String(p.referencia ?? '').trim()) throw new Error('La transferencia necesita referencia');
+    // La clave de rastreo de una transferencia es opcional: si se escribe se guarda, si no se omite
     const recibidoC = p.forma === 'efectivo' && p.recibido != null ? aCentavos(p.recibido) : montoC;
     if (recibidoC < montoC) throw new Error('El efectivo recibido no cubre el pago');
     return { forma: p.forma, montoC, recibidoC, referencia: String(p.referencia ?? '').trim() || null };

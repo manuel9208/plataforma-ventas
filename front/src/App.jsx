@@ -1,11 +1,14 @@
 import { Suspense, useEffect } from 'react';
 import { MemoryRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext.jsx';
+import { ClienteProvider } from './context/ClienteContext.jsx';
 import { MODULOS } from './config/modulosSistema.js';
 import RutaProtegida from './components/shared/RutaProtegida.jsx';
 import Boton from './components/shared/Boton.jsx';
 import Inicio from './components/publico/Inicio.jsx';
 import Login from './components/publico/Login.jsx';
+import EntrarCliente from './components/publico/EntrarCliente.jsx';
+import MiCuenta from './components/cliente/MiCuenta.jsx';
 import PanelInicio from './components/shared/PanelInicio.jsx';
 import Caja from './components/caja/Caja.jsx';
 
@@ -41,12 +44,15 @@ export default function App() {
   }
 
   return (
+    <ClienteProvider>
     <MemoryRouter initialEntries={[sessionStorage.getItem(CLAVE_RUTA) || '/']}>
       <GuardarRuta />
       <Suspense fallback={<Centro>Cargando…</Centro>}>
         <Routes>
           <Route path="/" element={<Inicio />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/cliente" element={<EntrarCliente />} />
+          <Route path="/mi-cuenta" element={<MiCuenta />} />
           <Route
             path="/panel"
             element={
@@ -78,5 +84,6 @@ export default function App() {
         </Routes>
       </Suspense>
     </MemoryRouter>
+    </ClienteProvider>
   );
 }

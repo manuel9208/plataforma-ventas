@@ -3,6 +3,8 @@ import { ErrorHttp } from '../utils/errores.js';
 import { registrarBitacora } from '../utils/bitacora.js';
 import * as repo from '../repositories/clientes.repository.js';
 import { serializarCliente } from '../serializers/clientes.serializer.js';
+import { generarPinEntrega, hashPin } from '../utils/pin.js';
+import { tienePermiso } from '../utils/permisos.js';
 
 const traducir = (err) =>
   err.code === '23505' ? new ErrorHttp(409, 'Ya existe un cliente con ese teléfono') : err;
@@ -56,6 +58,10 @@ export async function actualizar(actor, id, datos, ip) {
       for (const k of ['nombre', 'telefono', 'correo', 'notas', 'activo']) {
         if (datos[k] !== undefined) campos[k] = datos[k];
       }
+      if (datos.cumpleanos !== undefined) {
+        campos.cumple_mes = datos.cumpleanos?.mes ?? null;
+        campos.cumple_dia = datos.cumpleanos?.dia ?? null;
+      }
       // El consentimiento guarda la fecha en que se dio
       if (datos.aceptaWhatsapp !== undefined && datos.aceptaWhatsapp !== antesFila.acepta_whatsapp) {
         campos.acepta_whatsapp = datos.aceptaWhatsapp;
@@ -76,4 +82,28 @@ export async function actualizar(actor, id, datos, ip) {
   } catch (err) {
     throw traducir(err);
   }
+}
+
+// PIN nuevo de 4 dígitos al azar: se muestra una sola vez y se guarda cifrado.
+// Crear el primero lo puede hacer quien atiende al cliente; cambiarlo exige el permiso clientes.restablecer_pin.
+export async function generarPin(actor, id, ip) {
+  if (actor.esGlobal) throw new ErrorHttp(403, 'El administrador global no opera con clientes');
+  const pin = generarPinEntrega();
+  const hash = await hashPin(pin);
+
+  return conTransaccion(async (db) => {
+    const fila = await repo.obtener(db, actor.empresaId, id);
+    if (!fila || !fila.activo) throw new ErrorHttp(404, 'Cliente no encontrado');
+
+    const reemplaza = Boolean(fila.tiene_pin);
+    if (reemplaza && !tienePermiso(actor.permisos, 'clientes.restablecer_pin')) {
+      throw new ErrorHttp(403, 'Este cliente ya tiene PIN. Pide a un encargado que lo restablezca.');
+    }
+    if (!(await repo.guardarPin(db, actor.empresaId, id, hash, reemplaza))) {
+      throw new ErrorHttp(409, 'Ese cliente ya tiene PIN.');
+    }
+    // La bitácora nunca lleva el PIN
+    await bitacora(db, actor, reemplaza ? 'cliente.restablecer_pin' : 'cliente.crear_pin', id, null, null, ip);
+    return { pin, reemplazo: reemplaza };
+  });
 }

@@ -20,6 +20,7 @@ import ModalCliente from './ModalCliente.jsx';
 import ModalOtroServicio from './ModalOtroServicio.jsx';
 import ModalArticuloGuardado from './ModalArticuloGuardado.jsx';
 import BarraCliente from './BarraCliente.jsx';
+import ModalCompletarCliente from './ModalCompletarCliente.jsx';
 import SusArticulos from './SusArticulos.jsx';
 import ModalDescuento from './ModalDescuento.jsx';
 import TicketVenta from './TicketVenta.jsx';
@@ -47,6 +48,7 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
   const [editor, setEditor] = useState(null);
   const [otro, setOtro] = useState(null); // grupo al que se le agrega otro servicio
   const [eligiendoCliente, setEligiendoCliente] = useState(false);
+  const [completando, setCompletando] = useState(false);
   const [guardado, setGuardado] = useState(null); // artículo guardado del cliente que se está revisando
   const [cobrando, setCobrando] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -178,7 +180,9 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
     <>
       <div className="lg:grid lg:grid-cols-[1fr_24rem] lg:gap-6 items-start">
         <section>
-          {enServicios && <BarraCliente cliente={carrito.cliente} onAbrir={() => setEligiendoCliente(true)} />}
+          {enServicios && (
+            <BarraCliente cliente={carrito.cliente} onAbrir={() => setEligiendoCliente(true)} onCompletar={() => setCompletando(true)} />
+          )}
           <form onSubmit={buscarCodigo} className="mb-3 flex gap-2">
             <div className="relative flex-1">
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400">
@@ -345,6 +349,14 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
             setEligiendoCliente(false);
           }}
           onCerrar={() => setEligiendoCliente(false)}
+        />
+      )}
+
+      {completando && carrito.cliente?.vista?.id && (
+        <ModalCompletarCliente
+          cliente={carrito.cliente.vista}
+          onCambio={(vista) => carrito.ponerCliente(carrito.cliente.envio, vista)}
+          onCerrar={() => setCompletando(false)}
         />
       )}
 

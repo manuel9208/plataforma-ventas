@@ -26,3 +26,7 @@ export const bajaArticulo = asyncHandler(async (req, res) => {
   const { id, articuloId } = req.datos.params;
   res.json(await articulos.darDeBaja(req.usuario, id, articuloId, req.datos.body.motivo, req.ip));
 });
+
+export const generarPin = asyncHandler(async (req, res) => {
+  res.status(201).json(await servicio.generarPin(req.usuario, req.datos.params.id, req.ip));
+});

@@ -12,6 +12,7 @@ import * as turnosRepo from '../repositories/turnos.repository.js';
 import * as intentosRepo from '../repositories/intentos.repository.js';
 import { cargarDetalle } from './notas.service.js';
 import { autorizar, limitarIntentos } from './autorizacion.service.js';
+import { otorgarPorEntregaSeguro } from './puntos.service.js';
 import { ticketEntrega } from '../serializers/entregas.serializer.js';
 
 const MAX_FALLOS = 5;
@@ -139,6 +140,16 @@ export async function entregar(actor, ventaId, datos, ip) {
       await listaRepo.registrarCambioEstado(db, e, { partidaId, anterior: 'listo', nuevo: 'entregado', usuarioId: actor.id, motivo: null });
     }
 
+    // Puntos de los servicios entregados. Si falla, la entrega no se detiene.
+    const puntos = await otorgarPorEntregaSeguro(db, {
+      empresaId: e,
+      sucursalId: t.sucursal_id,
+      ventaId,
+      entregaId: datos.id,
+      partidaIds: datos.partidaIds,
+      usuarioId: actor.id,
+    });
+
     // La bitácora nunca lleva PIN
     await registrarBitacora(db, {
       empresaId: e,
@@ -159,6 +170,6 @@ export async function entregar(actor, ventaId, datos, ip) {
       ip,
     });
 
-    return armarTicket(db, { ...actor, sucursales: [t.sucursal_id] }, ventaId, datos.id, false);
+    return { ...(await armarTicket(db, { ...actor, sucursales: [t.sucursal_id] }, ventaId, datos.id, false)), puntos };
   });
 }

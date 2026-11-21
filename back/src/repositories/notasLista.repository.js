@@ -4,7 +4,10 @@ import { exigirEmpresa } from '../utils/tenant.js';
 const escaparLike = (t) => `%${t.replace(/[\\%_]/g, '\\$&')}%`;
 
 // MISMA fórmula que shared/calculos/saldo.js (resumenNota), escrita en SQL para filtrar y contar.
-const SALDO_SQL = `GREATEST(GREATEST(v.total - v.cancelado - v.ajustado, 0) + v.retenido - GREATEST(pg.pagado - v.reembolsado, 0), 0)`;
+export const SALDO_SQL = `GREATEST(GREATEST(v.total - v.cancelado - v.ajustado, 0) + v.retenido - GREATEST(pg.pagado - v.reembolsado, 0), 0)`;
+// Las otras dos cifras de resumenNota (valor vigente y pagado neto), en SQL
+export const VALOR_SQL = `(GREATEST(v.total - v.cancelado - v.ajustado, 0) + v.retenido)`;
+export const PAGADO_SQL = `GREATEST(pg.pagado - v.reembolsado, 0)`;
 
 // Notas de servicio de las sucursales del usuario, con su saldo y estado ya calculados en SQL.
 // $1 empresa, $2 sucursales del actor.

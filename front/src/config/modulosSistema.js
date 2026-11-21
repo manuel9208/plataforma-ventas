@@ -102,6 +102,12 @@ export const MODULOS = [
         roles: TODOS_LOS_ROLES,
         defecto: TODOS_LOS_ROLES,
       },
+      {
+        clave: 'clientes.restablecer_pin',
+        etiqueta: 'Restablecer el PIN de un cliente',
+        roles: ROLES_GESTION,
+        defecto: ['administrador', 'gerente'],
+      },
     ],
     componente: lazy(() => import('../components/admin/clientes/AdminClientes.jsx')),
   },
@@ -170,6 +176,24 @@ export const MODULOS = [
       },
     ],
     componente: lazy(() => import('../components/admin/promociones/AdminPromociones.jsx')),
+  },
+  {
+    id: 'reportes',
+    nombre: 'Reportes',
+    descripcion: 'Ventas, cobranza y estadísticas',
+    icono: 'reportes',
+    ruta: '/admin/reportes',
+    permiso: 'reportes.ver',
+    rolesPermitidos: ROLES_ADMIN,
+    permisos: [
+      {
+        clave: 'reportes.ver',
+        etiqueta: 'Ver los reportes de ventas',
+        roles: ROLES_GESTION,
+        defecto: ROLES_GESTION,
+      },
+    ],
+    componente: lazy(() => import('../components/admin/reportes/AdminReportes.jsx')),
   },
   {
     id: 'cuenta',
@@ -244,6 +268,13 @@ export const PERMISOS_ADICIONALES = [
     grupo: 'Caja',
     roles: ROLES_GESTION,
     defecto: ROLES_GESTION,
+  },
+  {
+    clave: 'puntos.ajustar',
+    etiqueta: 'Regalar o quitar puntos a un cliente',
+    grupo: 'Caja',
+    roles: ROLES_GESTION,
+    defecto: ['administrador', 'gerente'],
   },
   {
     clave: 'caja.financiar',

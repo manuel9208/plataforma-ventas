@@ -10,6 +10,7 @@ export function useClientes() {
   const [telefono, setTelefono] = useState('');
   const [nombre, setNombre] = useState('');
   const [estado, setEstado] = useState('activos'); // activos | inactivos | todos
+  const [perfil, setPerfil] = useState('todos'); // todos | completo | incompleto
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const [version, setVersion] = useState(0);
@@ -26,6 +27,7 @@ export function useClientes() {
             pagina,
             limite: LIMITE,
             activo: estado === 'todos' ? undefined : estado === 'activos',
+            perfil: perfil === 'todos' ? undefined : perfil,
           });
           if (!vivo) return;
           setDatos(r.datos);
@@ -43,7 +45,7 @@ export function useClientes() {
       vivo = false;
       clearTimeout(t);
     };
-  }, [telefono, nombre, pagina, estado, version]);
+  }, [telefono, nombre, pagina, estado, perfil, version]);
 
   const recargar = () => setVersion((n) => n + 1);
   const reiniciarPagina = (fn) => (v) => {
@@ -63,6 +65,8 @@ export function useClientes() {
     setNombre: reiniciarPagina(setNombre),
     estado,
     setEstado: reiniciarPagina(setEstado),
+    perfil,
+    setPerfil: reiniciarPagina(setPerfil),
     cargando,
     error,
     crear: async (d) => {
@@ -72,6 +76,12 @@ export function useClientes() {
     actualizar: async (id, d) => {
       await svc.actualizar(id, d);
       recargar();
+    },
+    // Devuelve { pin, reemplazo }: el PIN solo existe en esta respuesta
+    generarPin: async (id) => {
+      const r = await svc.generarPin(id);
+      recargar();
+      return r;
     },
   };
 }

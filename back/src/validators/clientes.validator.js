@@ -1,9 +1,14 @@
 import { z } from 'zod';
 import { telefono, correo } from './comunes.validator.js';
 import { nombrePropio } from '../utils/texto.js';
+import { validarCumple } from '@plataforma/calculos';
 
 const nombre = z.string().trim().min(2, 'Mínimo 2 caracteres').max(80).transform(nombrePropio);
 const notas = z.string().trim().min(1).max(500);
+const cumpleanos = z
+  .object({ mes: z.number().int().min(1).max(12), dia: z.number().int().min(1).max(31) })
+  .strict()
+  .refine((c) => validarCumple(c.mes, c.dia), 'Ese día no existe en ese mes');
 // Para buscar: solo dígitos, de 1 a 10
 const busquedaTelefono = z
   .string()
@@ -20,6 +25,7 @@ export const listarQuery = z.object({
     .enum(['true', 'false'])
     .optional()
     .transform((v) => (v === undefined ? undefined : v === 'true')),
+  perfil: z.enum(['completo', 'incompleto']).optional(),
   limite: z.coerce.number().int().min(1).max(50).default(10),
   pagina: z.coerce.number().int().min(1).default(1),
 });
@@ -30,6 +36,7 @@ export const crearBody = z
     telefono,
     correo: correo.optional(),
     notas: notas.optional(),
+    cumpleanos: cumpleanos.optional(),
     aceptaWhatsapp: z.boolean().default(false),
   })
   .strict();
@@ -40,6 +47,7 @@ export const actualizarBody = z
     telefono: telefono.optional(),
     correo: correo.nullable().optional(),
     notas: notas.nullable().optional(),
+    cumpleanos: cumpleanos.nullable().optional(),
     aceptaWhatsapp: z.boolean().optional(),
     activo: z.boolean().optional(),
   })

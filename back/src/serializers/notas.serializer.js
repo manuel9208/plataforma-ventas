@@ -4,7 +4,7 @@ const num = (v) => (v === null || v === undefined ? null : Number(v));
 const sinVacios = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null && v !== undefined && v !== ''));
 
 // Estado de la nota a partir de los contadores de la lista
-function estadoDesdeContadores(f) {
+export function estadoDesdeContadores(f) {
   const n = (x) => Number(x);
   if (n(f.cancelados) === n(f.articulos)) return 'cancelada';
   const estados = [
