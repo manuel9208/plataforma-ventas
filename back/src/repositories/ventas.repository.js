@@ -117,7 +117,7 @@ export async function buscarVenta(db, empresaId, id) {
   const r = await db.query(
     `SELECT v.id, v.folio, v.sucursal_id, v.turno_id, v.usuario_id, v.cliente_id, v.origen, v.precios_incluyen_iva,
             v.subtotal, v.iva, v.total, v.creado_en,
-            s.nombre AS sucursal_nombre, c.nombre AS caja_nombre, u.nombre AS usuario_nombre,
+            s.nombre AS sucursal_nombre, c.nombre AS caja_nombre, u.nombre AS usuario_nombre, r.nivel_jerarquico AS usuario_nivel,
             COALESCE(s.zona_horaria, e.zona_horaria) AS zona,
             cl.nombre AS cliente_nombre, cl.telefono AS cliente_telefono
      FROM ventas v
@@ -125,6 +125,7 @@ export async function buscarVenta(db, empresaId, id) {
      JOIN empresas e ON e.id = v.empresa_id
      JOIN cajas c ON c.id = v.caja_id AND c.empresa_id = v.empresa_id
      JOIN usuarios u ON u.id = v.usuario_id AND u.empresa_id = v.empresa_id
+     JOIN roles r ON r.id = u.rol_id AND r.empresa_id = u.empresa_id
      LEFT JOIN clientes cl ON cl.id = v.cliente_id AND cl.empresa_id = v.empresa_id
      WHERE v.empresa_id = $1 AND v.id = $2`,
     [empresaId, id]
@@ -136,7 +137,7 @@ export async function listarPartidas(db, empresaId, ventaId) {
   exigirEmpresa(empresaId);
   const r = await db.query(
     `SELECT orden, tipo, nombre, sku, unidad, cantidad, precio_lista, precio_aplicado, origen_precio, tasa_iva, base, iva, total, entregado_en,
-            promocion_nombre, descuento
+            promocion_nombre, descuento, puntos_canjeados, descuento_puntos
      FROM venta_partidas WHERE empresa_id = $1 AND venta_id = $2 ORDER BY orden`,
     [empresaId, ventaId]
   );
@@ -179,15 +180,16 @@ export async function insertarPartidas(db, empresaId, ventaId, usuarioId, partid
          (empresa_id, venta_id, orden, tipo, producto_id, presentacion_id, nombre, sku, unidad, factor,
           cantidad, cantidad_base, precio_lista, precio_aplicado, origen_precio, tasa_iva, base, iva, total,
           entregado_en, entregado_por, promocion_id, promocion_nombre, descuento, descuento_origen,
-          descuento_motivo, descuento_autorizado_por)
+          descuento_motivo, descuento_autorizado_por, puntos_canjeados, descuento_puntos)
        VALUES ($1, $2, $3, 'producto', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, now(), $19,
-               $20, $21, $22, $23, $24, $25)`,
+               $20, $21, $22, $23, $24, $25, $26, $27)`,
       [
         empresaId, ventaId, i + 1, p.productoId, p.presentacionId, p.nombre, p.sku, p.unidad, p.factor,
         p.cantidad, p.cantidadBase, p.precioLista, p.precioAplicado, p.origenPrecio, p.tasa, p.base, p.iva, p.total,
         usuarioId,
         p.promocionId ?? null, p.promocionNombre ?? null, p.descuento ?? 0, p.descuentoOrigen ?? null,
         p.descuentoMotivo ?? null, p.descuentoAutorizadoPor ?? null,
+        p.puntosCanjeados ?? 0, p.descuentoPuntos ?? 0,
       ]
     );
   }

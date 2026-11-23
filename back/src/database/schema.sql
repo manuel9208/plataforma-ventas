@@ -1473,3 +1473,8 @@ CREATE INDEX IF NOT EXISTS idx_puntos_venta ON puntos_movimientos (empresa_id, v
 -- ============ BLOQUE 40: META DE CRECIMIENTO (REPORTES) ============
 ALTER TABLE empresa_config ADD COLUMN IF NOT EXISTS meta_crecimiento NUMERIC(5,2) NOT NULL DEFAULT 5 CHECK (meta_crecimiento >= 0 AND meta_crecimiento <= 100);
 ALTER TABLE sucursal_config ADD COLUMN IF NOT EXISTS meta_crecimiento NUMERIC(5,2) CHECK (meta_crecimiento >= 0 AND meta_crecimiento <= 100);
+
+-- ============ BLOQUE 42: CANJE DE PUNTOS EN LA VENTA ============
+ALTER TABLE venta_partidas
+ADD COLUMN IF NOT EXISTS puntos_canjeados INTEGER NOT NULL DEFAULT 0 CHECK (puntos_canjeados >= 0),
+ADD COLUMN IF NOT EXISTS descuento_puntos NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (descuento_puntos >= 0);

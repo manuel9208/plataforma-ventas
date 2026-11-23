@@ -99,3 +99,10 @@ export async function guardarPin(db, empresaId, id, pinHash, reemplazar) {
   );
   return r.rowCount > 0;
 }
+
+// Solo para verificar el PIN al canjear puntos: el hash nunca sale del servidor
+export async function pinDeCliente(db, empresaId, id) {
+  exigirEmpresa(empresaId);
+  const r = await db.query(`SELECT activo, pin_hash FROM clientes WHERE empresa_id = $1 AND id = $2`, [empresaId, id]);
+  return r.rows[0] || null;
+}

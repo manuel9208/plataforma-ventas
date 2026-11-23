@@ -53,3 +53,6 @@ export const COLUMNAS_REPORTE = [
 ];
 
 export const COLUMNAS_POR_DEFECTO = COLUMNAS_REPORTE.filter((c) => c.defecto).map((c) => c.id);
+
+// Sin servicios (súper) estas columnas no tienen sentido
+export const COLUMNAS_SOLO_LIMPIEZA = ['entrega', 'financiamiento'];

@@ -64,7 +64,7 @@ const articuloNota = z
   .object({
     datos: articulo,
     comentario: z.string().trim().max(300).optional(),
-    servicios: z.array(servicioDeArticulo).min(1, 'Agrega al menos un servicio al artículo').max(10),
+    servicios: z.array(servicioDeArticulo).min(1, 'Agrega al menos un servicio al artículo'),
   })
   .strict();
 
@@ -81,7 +81,7 @@ const pago = z
 const descuentoLinea = z
   .object({
     presentacionId: idNumero.optional(),
-    servicioIndice: z.number().int().min(0).max(49).optional(),
+    servicioIndice: z.number().int().min(0).optional(),
     porcentaje: z.number().positive().max(99).refine(maxDecimales(2), 'Máximo 2 decimales'),
   })
   .strict()
@@ -91,19 +91,32 @@ const descuentosManuales = z
   .object({
     motivo: z.string().trim().min(3, 'Escribe el motivo').max(200),
     autorizacion: z.object({ telefono: telefono.optional(), pin }).strict(),
-    lineas: z.array(descuentoLinea).min(1).max(50),
+    lineas: z.array(descuentoLinea).min(1),
   })
   .strict();
+
+// Canje de puntos: puntos enteros, con el PIN del cliente o la autorización de un encargado
+const canjeDePuntos = z
+  .object({
+    puntos: z.number().int().min(1).max(1000000),
+    pinCliente: pin.optional(),
+    autorizacion: z.object({ telefono: telefono.optional(), pin }).strict().optional(),
+  })
+  .strict()
+  .refine((c) => (c.pinCliente !== undefined) !== (c.autorizacion !== undefined), {
+    message: 'Indica el PIN del cliente o la autorización de un encargado',
+  });
 
 export const crearVentaBody = z
   .object({
     id: z.string().uuid('Venta inválida'),
-    lineas: z.array(linea).max(100).default([]),
-    servicios: z.array(servicioLinea).max(50).default([]),
-    articulos: z.array(articuloNota).max(25).default([]),
+    lineas: z.array(linea).default([]),
+    servicios: z.array(servicioLinea).default([]),
+    articulos: z.array(articuloNota).default([]),
     // En una nota con servicios los pagos pueden venir vacíos (abono de $0)
     pagos: z.array(pago).max(6).default([]),
     descuentos: descuentosManuales.optional(),
+    canje: canjeDePuntos.optional(),
     // El total que vio la Caja: el servidor lo compara con el suyo, nunca lo usa para cobrar
     totalMostrado: dinero.optional(),
     financiada: z.boolean().optional(),
@@ -113,4 +126,6 @@ export const crearVentaBody = z
   .strict()
   .refine((d) => d.lineas.length + d.servicios.length + d.articulos.length > 0, { message: 'El carrito está vacío' })
   .refine((d) => !(d.servicios.length && d.articulos.length), { message: 'Manda los servicios sueltos o por artículo, no ambos' })
-  .refine((d) => !(d.clienteId && d.clienteNuevo), { message: 'Indica un cliente existente o uno nuevo, no ambos' });
+  .refine((d) => !(d.clienteId && d.clienteNuevo), { message: 'Indica un cliente existente o uno nuevo, no ambos' })
+  .refine((d) => !d.canje || Boolean(d.clienteId), { message: 'Para usar puntos elige al cliente registrado' });
+  export const canjeQuery = z.object({ clienteId: z.string().uuid('Cliente inválido') });

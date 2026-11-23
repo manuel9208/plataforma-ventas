@@ -55,6 +55,37 @@ export function useReporteVentas() {
 
   const validez = rango ? validarRango(rango.desde, rango.hasta) : { ok: false, error: '' };
 
+  // Mismos filtros que la tabla, sin orden ni páginas
+  const consultaAnalisis = useMemo(() => {
+    if (!rango || !validez.ok) return null;
+    return {
+      desde: rango.desde,
+      hasta: rango.hasta,
+      sucursales: f.sucursales?.length ? f.sucursales.join(',') : undefined,
+      empleadoId: f.empleadoId || undefined,
+      estado: f.estado,
+      giro: f.giro,
+    };
+  }, [rango, validez.ok, f.sucursales, f.empleadoId, f.estado, f.giro]);
+
+  // Lo mismo que ve la pantalla, para el PDF y el Excel (sin páginas; las columnas las agrega el botón)
+  const consultaExportar = useMemo(() => {
+    if (!rango || !validez.ok) return null;
+    return {
+      desde: rango.desde,
+      hasta: rango.hasta,
+      sucursales: f.sucursales?.length ? f.sucursales.join(',') : undefined,
+      empleadoId: f.empleadoId || undefined,
+      estado: f.estado,
+      giro: f.giro,
+      orden: f.orden,
+      direccion: f.direccion,
+      periodo: f.tipo,
+      hastaHoy: f.hastaHoy ? 'true' : 'false',
+      ordenConsumo: f.ordenConsumo,
+    };
+  }, [rango, validez.ok, f.sucursales, f.empleadoId, f.estado, f.giro, f.orden, f.direccion, f.tipo, f.hastaHoy, f.ordenConsumo]);
+
   const consulta = useMemo(() => {
     if (!rango || !validez.ok) return null;
     return {
@@ -142,6 +173,8 @@ export function useReporteVentas() {
     rango,
     consultaEstadisticas,
     consultaConsumo,
+    consultaAnalisis,
+    consultaExportar,
     // Opciones que no mueven la tabla de página
     cambiarOpcion: (parcial) => setF((x) => ({ ...x, ...parcial })),
     validez,

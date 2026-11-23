@@ -1,3 +1,5 @@
+import { nombreParaTicket } from '../utils/atendio.js';
+
 const sinVacios = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null && v !== undefined && v !== ''));
 const PENDIENTES = ['recibido', 'en_proceso', 'listo'];
 
@@ -11,10 +13,10 @@ export function ticketEntrega(detalle, { entrega, articulos, extras }, repetida 
     sucursal: detalle.sucursal,
     zonaHoraria: detalle.zonaHoraria,
     caja: entrega.caja,
-    entrego: entrega.entrego,
+    entrego: nombreParaTicket(entrega.entrego, entrega.entrego_nivel),
     entregadaEn: entrega.creado_en,
     metodo: entrega.metodo,
-    autorizo: entrega.autorizo ?? null,
+    autorizo: nombreParaTicket(entrega.autorizo, entrega.autorizo_nivel),
     motivo: entrega.motivo ?? null,
     recoge: entrega.recoge_nombre ?? null,
     cliente: detalle.cliente ? { nombre: detalle.cliente.nombre, telefono: detalle.cliente.telefono } : null,

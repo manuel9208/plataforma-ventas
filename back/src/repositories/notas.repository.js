@@ -183,13 +183,14 @@ export async function insertarServicio(db, empresaId, s) {
     `INSERT INTO venta_partidas
        (empresa_id, venta_id, orden, tipo, nombre, sku, cantidad, precio_lista, precio_aplicado, origen_precio,
         tasa_iva, base, iva, total, promocion_id, promocion_nombre, descuento, descuento_origen,
-        descuento_motivo, descuento_autorizado_por)
-     VALUES ($1, $2, $3, 'servicio', $4, $5, 1, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        descuento_motivo, descuento_autorizado_por, puntos_canjeados, descuento_puntos)
+     VALUES ($1, $2, $3, 'servicio', $4, $5, 1, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
      RETURNING id`,
     [
       empresaId, s.ventaId, s.orden, s.nombre, s.sku, s.precioLista, s.precioAplicado, s.origenPrecio, s.tasa, s.base, s.iva, s.total,
       s.promocionId ?? null, s.promocionNombre ?? null, s.descuento ?? 0, s.descuentoOrigen ?? null,
       s.descuentoMotivo ?? null, s.descuentoAutorizadoPor ?? null,
+      s.puntosCanjeados ?? 0, s.descuentoPuntos ?? 0,
     ]
   );
   const id = r.rows[0].id;

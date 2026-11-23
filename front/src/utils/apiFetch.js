@@ -48,3 +48,38 @@ export async function apiFetch(ruta, { metodo = 'GET', cuerpo, query, sesion = '
   }
   return datos;
 }
+
+// Descarga un archivo (PDF, Excel…) que arma el servidor y lo guarda en el equipo.
+// El nombre se arma en la pantalla: no hace falta leer cabeceras del servidor.
+export async function apiDescargar(ruta, { query, nombre = 'descarga' } = {}) {
+  const url = new URL(BASE + ruta);
+  if (query) {
+    Object.entries(query).forEach(([k, v]) => {
+      if (v !== undefined && v !== '') url.searchParams.set(k, String(v));
+    });
+  }
+
+  const token = localStorage.getItem('token');
+  const headers = { 'X-Empresa-Slug': SLUG };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  let res;
+  try {
+    res = await fetch(url, { headers });
+  } catch {
+    throw new ErrorApi(0, 'Sin conexión con el servidor');
+  }
+  if (!res.ok) {
+    const datos = await res.json().catch(() => null);
+    throw new ErrorApi(res.status, datos?.error || 'No se pudo generar el archivo', datos?.detalles);
+  }
+
+  const direccion = URL.createObjectURL(await res.blob());
+  const enlace = document.createElement('a');
+  enlace.href = direccion;
+  enlace.download = nombre;
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  setTimeout(() => URL.revokeObjectURL(direccion), 10000);
+}

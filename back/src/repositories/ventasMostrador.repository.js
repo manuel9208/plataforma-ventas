@@ -10,6 +10,7 @@ const DESDE = `
   JOIN empresas e ON e.id = v.empresa_id
   JOIN cajas cj ON cj.id = v.caja_id AND cj.empresa_id = v.empresa_id
   JOIN usuarios u ON u.id = v.usuario_id AND u.empresa_id = v.empresa_id
+  JOIN roles ro ON ro.id = u.rol_id AND ro.empresa_id = u.empresa_id
   LEFT JOIN clientes c ON c.id = v.cliente_id AND c.empresa_id = v.empresa_id`;
 
 // turnoId (si viene) limita la lista a las ventas de ese turno
@@ -58,7 +59,7 @@ export async function obtener(db, empresaId, sucursales, id) {
     `SELECT v.id, v.sucursal_id, v.turno_id, v.folio, v.total, v.subtotal, v.iva, v.precios_incluyen_iva,
             v.cancelado, v.reembolsado, v.creado_en,
             s.nombre AS sucursal_nombre, ${ZONA} AS zona, e.nombre AS empresa_nombre,
-            cj.nombre AS caja_nombre, u.nombre AS cajero_nombre,
+            cj.nombre AS caja_nombre, u.nombre AS cajero_nombre, ro.nivel_jerarquico AS cajero_nivel,
             c.id AS cliente_id, c.nombre AS cliente_nombre, c.telefono AS cliente_telefono
      ${DESDE}
      WHERE v.empresa_id = $1 AND v.id = $2 AND v.sucursal_id = ANY($3::bigint[]) AND NOT v.tiene_servicios`,

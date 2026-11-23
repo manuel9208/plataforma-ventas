@@ -115,7 +115,7 @@ export function ticketCliente(venta, { ancho = 80, empresa = '', esCopia = false
   t.texto(esNota ? 'NOTA DE SERVICIO' : 'VENTA', CENTRO);
   t.texto(venta.folio, { ...CENTRO_NEGRITA, grande: true });
   t.texto(fmt.fechaHora(venta.creadaEn, venta.zonaHoraria), CENTRO);
-  t.texto(`${venta.caja} · ${venta.cajero}`, CENTRO);
+  t.texto([venta.caja, venta.cajero].filter(Boolean).join(' · '), CENTRO);
   if (venta.cliente) t.texto(`${venta.cliente.nombre} · ${telefono(venta.cliente.telefono)}`, CENTRO);
   t.linea();
 
@@ -148,6 +148,10 @@ export function ticketCliente(venta, { ancho = 80, empresa = '', esCopia = false
   }
   const ahorro = fmt.totalAhorro([...productos, ...venta.servicios]);
   if (ahorro > 0) t.fila('Ahorraste', fmt.dinero(ahorro));
+  if (venta.canje) {
+    t.fila('Pagado con puntos', fmt.dinero(venta.canje.descuento));
+    t.texto(`${venta.canje.puntos} puntos, ya descontados`, { sangria: 2 });
+  }
   t.fila('TOTAL', fmt.dinero(venta.total), { negrita: true });
   t.linea();
 
@@ -255,7 +259,7 @@ export function ticketEntregaTermico(ticket, { ancho = 80, corte = true, empresa
   t.texto('ENTREGA', CENTRO);
   t.texto(ticket.folio, { ...CENTRO_NEGRITA, grande: true });
   t.texto(fmt.fechaHora(ticket.entregadaEn, ticket.zonaHoraria), CENTRO);
-  t.texto(`${ticket.caja} · ${ticket.entrego}`, CENTRO);
+  t.texto([ticket.caja, ticket.entrego].filter(Boolean).join(' · '), CENTRO);
   if (ticket.cliente) t.texto(`${ticket.cliente.nombre} · ${telefono(ticket.cliente.telefono)}`, CENTRO);
   t.linea();
 
@@ -288,7 +292,6 @@ export function ticketEntregaTermico(ticket, { ancho = 80, corte = true, empresa
   t.linea();
   if (ticket.recoge) t.fila('Recogió', ticket.recoge);
   t.fila('Forma', fmt.etiquetaMetodo(ticket.metodo));
-  if (ticket.autorizo) t.fila('Autorizó', ticket.autorizo);
   if (ticket.motivo) t.fila('Motivo', ticket.motivo);
 
   if (ticket.puntos?.ganados > 0) {

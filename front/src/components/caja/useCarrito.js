@@ -1,17 +1,21 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   aCentavos,
   aMonto,
   aplicarPromocionesAPartidas,
   calcularLineaVenta,
+  limiteCanjeDeVenta,
+  resolverCanje,
   siguienteMayoreo,
   totalAhorro,
   totalesVenta,
 } from '@plataforma/calculos';
+import * as svc from '../../services/caja.service.js';
 
-export const MAX_ARTICULOS = 25;
-export const MAX_SERVICIOS_ARTICULO = 10;
-export const MAX_SERVICIOS_NOTA = 50;
+// Sin límite: la nota lleva todos los artículos y servicios que hagan falta
+export const MAX_ARTICULOS = Infinity;
+export const MAX_SERVICIOS_ARTICULO = Infinity;
+export const MAX_SERVICIOS_NOTA = Infinity;
 
 let contador = 0;
 const nuevaClave = (prefijo) => `${prefijo}${++contador}`;
@@ -41,6 +45,25 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiami
   const [cliente, setCliente] = useState(null); // { envio, vista } o null
   // Descuento manual: { lineas: { claveDelRenglón: porcentaje }, motivo, autorizacion }
   const [manual, setManual] = useState(SIN_MANUAL);
+
+  // Puntos: lo que el servidor dice del cliente elegido y lo que el cajero decidió usar
+  const clienteId = cliente?.vista?.id ?? null;
+  const [infoCanje, setInfoCanje] = useState(null); // { disponible, saldo, tienePin, ajustes }
+  const [canje, setCanje] = useState(null); // { puntos, auth } · auth: { pinCliente } o { autorizacion }
+  const [recarga, setRecarga] = useState(0);
+
+  useEffect(() => {
+    setInfoCanje(null);
+    if (!clienteId) return undefined;
+    let vivo = true;
+    svc
+      .canje(clienteId)
+      .then((r) => vivo && setInfoCanje(r))
+      .catch(() => vivo && setInfoCanje(null));
+    return () => {
+      vivo = false;
+    };
+  }, [clienteId, recarga]);
 
   const numServicios = articulos.reduce((n, g) => n + g.servicios.length, 0);
   // Financiada solo si la sucursal y el empleado pueden y hay servicios en la nota
@@ -174,7 +197,10 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiami
     });
   };
 
-  const ponerCliente = (envio, vista) => setCliente(envio ? { envio, vista } : null);
+  const ponerCliente = (envio, vista) => {
+    if ((vista?.id ?? null) !== clienteId) setCanje(null);
+    setCliente(envio ? { envio, vista } : null);
+  };
 
   const vaciar = () => {
     setFinanciarNota(false);
@@ -182,6 +208,7 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiami
     setArticulos([]);
     setCliente(null);
     setManual(SIN_MANUAL);
+    setCanje(null);
   };
 
   const calculado = useMemo(() => {
@@ -246,9 +273,29 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiami
       incluyeIva,
     });
 
+    // 2b) Puntos del cliente: misma función que el servidor (rebaja las partidas ya con promoción)
+    const ajustesCanje = infoCanje?.disponible ? infoCanje.ajustes : null;
+    const limiteCanje = ajustesCanje
+      ? limiteCanjeDeVenta({ productos: final.productos, servicios: final.servicios, ajustes: ajustesCanje, saldo: infoCanje.saldo })
+      : null;
+    const resolucion =
+      canje && ajustesCanje
+        ? resolverCanje({
+            productos: final.productos,
+            servicios: final.servicios,
+            ajustes: ajustesCanje,
+            saldo: infoCanje.saldo,
+            puntos: canje.puntos,
+            incluyeIva,
+          })
+        : null;
+    const conCanje = resolucion?.ok ? resolucion : null;
+    const finalProductos = conCanje?.productos ?? final.productos;
+    const finalServicios = conCanje?.servicios ?? final.servicios;
+
     // 3) Lo que se muestra en cada renglón
     const lineas = base.map((l) => {
-      const partes = final.productos.filter((p) => p.clave === l.clave);
+      const partes = finalProductos.filter((p) => p.clave === l.clave);
       return {
         ...l,
         total: aMonto(sumaC(partes.map((p) => p.total))),
@@ -260,7 +307,7 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiami
     });
 
     const serviciosCalc = serviciosBase.map((s, i) => {
-      const f = final.servicios[i];
+      const f = finalServicios[i];
       const extrasC = sumaC(s.extras.map((x) => x.total));
       const cargoC = s.cargo ? aCentavos(s.cargo.total) : 0;
       return {
@@ -281,8 +328,8 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiami
     });
 
     const piezas = [
-      ...final.productos.map((p) => p.calculada),
-      ...final.servicios.map((s) => s.calculada),
+      ...finalProductos.map((p) => p.calculada),
+      ...finalServicios.map((s) => s.calculada),
       ...serviciosBase.flatMap((s) => [...s.extras, ...(s.cargo ? [s.cargo] : [])]),
     ];
     const totales = piezas.length ? totalesVenta(piezas) : { total: 0, subtotal: null, iva: null, desglosado: false };
@@ -321,8 +368,11 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiami
       descuentoManual:
         tieneDescuentoManual && manual.autorizacion ? { motivo: manual.motivo, autorizacion: manual.autorizacion, lineas: lineasManual } : null,
       claves: [...base.map((l) => l.clave), ...serviciosBase.map((s) => s.clave)],
+      limiteCanje,
+      canjeActual: conCanje ? { puntos: conCanje.puntos, descuento: conCanje.descuento } : null,
+      canjeError: resolucion && !resolucion.ok ? resolucion.error : '',
     };
-  }, [renglones, articulos, incluyeIva, promociones, manual, financiada, cargoFin]);
+  }, [renglones, articulos, incluyeIva, promociones, manual, financiada, cargoFin, infoCanje, canje]);
 
   return {
     ...calculado,
@@ -339,6 +389,17 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiami
     motivoManual: manual.motivo,
     cliente,
     ponerCliente,
+    puntos: {
+      info: infoCanje,
+      limite: calculado.limiteCanje,
+      actual: calculado.canjeActual,
+      error: calculado.canjeError,
+      // Lo que se manda al servidor al cobrar (solo si el canje es válido)
+      envio: calculado.canjeActual && canje ? { puntos: canje.puntos, ...canje.auth } : null,
+      aplicar: (puntos, auth) => setCanje({ puntos, auth }),
+      quitar: () => setCanje(null),
+      recargar: () => setRecarga((n) => n + 1),
+    },
     porcentajeDe: (clave) => manual.lineas[clave] ?? null,
     agregar,
     poner,

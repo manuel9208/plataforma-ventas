@@ -1,4 +1,5 @@
 import { estadoDeNota, resumenNota } from '@plataforma/calculos';
+import { nombreParaTicket } from '../utils/atendio.js';
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 const sinVacios = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null && v !== undefined && v !== ''));
@@ -88,7 +89,7 @@ export function notaDetalle(v, productos, articulos, pagos, pies, ajustes = { vi
     sucursal: v.sucursal_nombre,
     direccion: v.sucursal_direccion,
     caja: v.caja_nombre,
-    cajero: v.cajero_nombre,
+    cajero: nombreParaTicket(v.cajero_nombre, v.cajero_nivel),
     cliente: v.cliente_id ? { id: v.cliente_id, nombre: v.cliente_nombre, telefono: v.cliente_telefono } : null,
     // total = lo que vale la nota ahora; pagado = lo cobrado menos lo devuelto
     total: resumen.total,
@@ -168,7 +169,7 @@ export function reciboCobro(venta, cobro, pagos) {
     total: venta.total,
     pagado: venta.pagado,
     saldo: venta.saldo,
-    cobro: pagos[0]?.cobro ?? null,
+    cobro: nombreParaTicket(pagos[0]?.cobro, pagos[0]?.cobro_nivel),
     caja: pagos[0]?.caja ?? null,
   };
 }

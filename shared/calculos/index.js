@@ -27,3 +27,5 @@ export * from './puntos.js';
 export * from './periodos.js';
 export * from './reporteVentas.js';
 export * from './estadisticasVentas.js';
+export * from './analisisVentas.js';
+export * from './canjePuntos.js';

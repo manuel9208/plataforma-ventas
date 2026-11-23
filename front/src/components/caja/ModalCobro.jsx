@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { abonoSugerido, normalizarPagos, normalizarPagosNota, pagoMinimoNota, resumenPagos, sugerenciasEfectivo } from '@plataforma/calculos';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { formatearMoneda } from '../../utils/formato.js';
@@ -7,6 +7,7 @@ import Boton from '../shared/Boton.jsx';
 import Campo from '../shared/Campo.jsx';
 import MensajeError from '../shared/MensajeError.jsx';
 import BuscadorCliente from './BuscadorCliente.jsx';
+import PuntosEnCobro from './PuntosEnCobro.jsx';
 
 const FORMAS = [
   { id: 'efectivo', nombre: 'Efectivo' },
@@ -20,7 +21,7 @@ const filaNueva = (forma = 'efectivo', monto = '') => ({ _k: `p${++contador}`, f
 const redondear = (n) => Number(Number(n).toFixed(2));
 
 // total: lo que cuesta todo. totalServicios: la parte que acepta abono. config: abono de la sucursal.
-export default function ModalCobro({ total, totalProductos = 0, totalServicios = 0, financiada = false, config, clienteInicial = null, enviando, error, onConfirmar, onCerrar }) {
+export default function ModalCobro({ total, totalProductos = 0, totalServicios = 0, financiada = false, config, clienteInicial = null, puntos = null, puedeAutorizar = false, onCliente, enviando, error, onConfirmar, onCerrar }) {
   const { empresa } = useAuth();
   const dinero = (v) => formatearMoneda(v, empresa.moneda);
   const esNota = totalServicios > 0;
@@ -36,6 +37,12 @@ export default function ModalCobro({ total, totalProductos = 0, totalServicios =
   const [referencia, setReferencia] = useState('');
   const [filas, setFilas] = useState(() => [filaNueva('efectivo'), filaNueva('tarjeta')]);
   const [cliente, setCliente] = useState(clienteInicial?.envio ?? null);
+
+  // Si cambia el total (por ejemplo al usar puntos) se vuelve a calcular el abono sugerido
+  useEffect(() => {
+    setACobrar(String(sugerido));
+    setRecibido('');
+  }, [sugerido]);
 
   const montoNota = esNota ? Number(aCobrar || 0) : total;
 
@@ -291,10 +298,18 @@ export default function ModalCobro({ total, totalProductos = 0, totalServicios =
             {esNota ? 'Cliente *' : 'Cliente (opcional)'}
           </summary>
           <div className="mt-3">
-            <BuscadorCliente inicial={clienteInicial?.vista} onCambio={(envio) => setCliente(envio)} />
+            <BuscadorCliente
+              inicial={clienteInicial?.vista}
+              onCambio={(envio, vista) => {
+                setCliente(envio);
+                onCliente?.(envio, vista);
+              }}
+            />
             {faltaCliente && <p className="mt-2 text-xs text-amber-700">Escribe el teléfono y el nombre del cliente.</p>}
           </div>
         </details>
+
+        {puntos?.info?.disponible && puntos.info.saldo > 0 && <PuntosEnCobro puntos={puntos} puedeAutorizar={puedeAutorizar} />}
 
         {problema && !pagos && (modo !== 'mixto' || falta === 0 || esNota) && <p className="text-sm text-red-600">{problema}</p>}
         <MensajeError error={error} />

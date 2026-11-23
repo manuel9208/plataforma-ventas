@@ -165,7 +165,7 @@ export default function DetalleVenta({ id, onVolver, onOperando }) {
             <div>
               <p className="font-semibold">{venta.cliente ? venta.cliente.nombre : 'Sin cliente'}</p>
               <p className="text-xs text-neutral-400 mt-1">
-                {venta.sucursal} · {venta.caja} · {venta.cajero}
+                {[venta.sucursal, venta.caja, venta.cajero].filter(Boolean).join(' · ')}
               </p>
               <p className="text-xs text-neutral-400">{formatearFechaHora(venta.creadaEn, venta.zonaHoraria)}</p>
             </div>

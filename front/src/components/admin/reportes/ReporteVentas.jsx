@@ -8,8 +8,10 @@ import TotalesPorSucursal from './TotalesPorSucursal.jsx';
 import TablaReporte from './TablaReporte.jsx';
 import EstadisticasVentas from './EstadisticasVentas.jsx';
 import ConsumoVentas from './ConsumoVentas.jsx';
+import AnalisisVentas from './AnalisisVentas.jsx';
 import DetalleVentaReporte from './DetalleVentaReporte.jsx';
 import ModalColumnas from './ModalColumnas.jsx';
+import BotonesExportar from './BotonesExportar.jsx';
 import { useReporteVentas } from './useReporteVentas.js';
 import { useColumnasReporte } from './useColumnasReporte.js';
 
@@ -35,6 +37,8 @@ export default function ReporteVentas() {
   return (
     <section className="space-y-5">
       <FiltrosReporte r={r} esLimpieza={esLimpieza} />
+
+      <BotonesExportar consulta={r.consultaExportar} columnas={col.columnas.map((c) => c.id)} total={d?.total ?? 0} />
 
       {!r.validez.ok && r.validez.error && (
         <div className="max-w-xl">
@@ -68,6 +72,7 @@ export default function ReporteVentas() {
             onAbrir={setAbierta}
           />
           <ConsumoVentas consulta={r.consultaConsumo} esLimpieza={esLimpieza} onOrden={(ordenConsumo) => r.cambiarOpcion({ ordenConsumo })} />
+          <AnalisisVentas consulta={r.consultaAnalisis} esLimpieza={esLimpieza} onAbrir={setAbierta} />
           <EstadisticasVentas
             consulta={r.consultaEstadisticas}
             hoy={r.opciones.hoy}

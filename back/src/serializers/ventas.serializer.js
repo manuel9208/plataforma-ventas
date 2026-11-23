@@ -1,4 +1,5 @@
-import { calcularEstadoPago } from '@plataforma/calculos';
+import { aCentavos, aMonto, calcularEstadoPago } from '@plataforma/calculos';
+import { nombreParaTicket } from '../utils/atendio.js';
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 const sinVacios = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null && v !== undefined && v !== ''));
@@ -43,7 +44,7 @@ export function venta(v, partidas, pagos, nota = NOTA_VACIA) {
     folio: v.folio,
     sucursal: v.sucursal_nombre,
     caja: v.caja_nombre,
-    cajero: v.usuario_nombre,
+    cajero: nombreParaTicket(v.usuario_nombre, v.usuario_nivel),
     cliente: v.cliente_nombre ? { nombre: v.cliente_nombre, telefono: v.cliente_telefono } : null,
     preciosIncluyenIva: v.precios_incluyen_iva,
     subtotal: num(v.subtotal),
@@ -55,6 +56,14 @@ export function venta(v, partidas, pagos, nota = NOTA_VACIA) {
     tieneServicios: nota.tieneServicios,
     tienePin: nota.tienePin,
     financiada: nota.financiada ?? false,
+    // Lo que se pagó con puntos (ya viene descontado de los precios)
+    canje:
+      partidas.some((p) => Number(p.puntos_canjeados) > 0)
+        ? {
+            puntos: partidas.reduce((s, p) => s + Number(p.puntos_canjeados ?? 0), 0),
+            descuento: aMonto(partidas.reduce((s, p) => s + Math.round(aCentavos(Number(p.descuento_puntos ?? 0))), 0)),
+          }
+        : null,
     servicios,
     creadaEn: v.creado_en,
     zonaHoraria: v.zona,

@@ -213,6 +213,57 @@ export const AJUSTES = [
     descripcion: 'Servirá para canjear. Ejemplo: 0.50 significa que 100 puntos valen $50.',
   },
   {
+    clave: 'puntosCanjearProductos',
+    columna: 'puntos_canjear_productos',
+    grupo: 'puntos',
+    tipo: 'booleano',
+    nivel: 'ambos',
+    etiqueta: 'Se pueden canjear puntos en productos',
+    descripcion: 'El cliente paga parte de sus productos con puntos. Necesita su PIN o la autorización de un encargado.',
+  },
+  {
+    clave: 'puntosCanjearServicios',
+    columna: 'puntos_canjear_servicios',
+    grupo: 'puntos',
+    tipo: 'booleano',
+    nivel: 'ambos',
+    giros: ['limpieza'],
+    etiqueta: 'Se pueden canjear puntos en servicios',
+    descripcion: 'Los extras y el cargo de financiamiento no se pagan con puntos.',
+  },
+  {
+    clave: 'puntosCanjeEnPromo',
+    columna: 'puntos_canje_en_promo',
+    grupo: 'puntos',
+    tipo: 'booleano',
+    nivel: 'ambos',
+    etiqueta: 'Canjear puntos en notas con promoción o descuento',
+    descripcion: 'Apagado: si la compra trae alguna promoción o descuento, no se pueden usar puntos en ella.',
+  },
+  {
+    clave: 'puntosTopeCanje',
+    columna: 'puntos_tope_canje',
+    grupo: 'puntos',
+    tipo: 'numero',
+    nivel: 'ambos',
+    min: 0,
+    max: 100,
+    etiqueta: 'Máximo a pagar con puntos por nota (%)',
+    descripcion: 'Ejemplo: 50 significa que los puntos cubren hasta la mitad de lo que admite canje. Escribe 0 para no permitirlo.',
+  },
+  {
+    clave: 'puntosMinimoCanje',
+    columna: 'puntos_minimo_canje',
+    grupo: 'puntos',
+    tipo: 'numero',
+    nivel: 'ambos',
+    entero: true,
+    min: 0,
+    max: 100000,
+    etiqueta: 'Mínimo de puntos para canjear',
+    descripcion: 'Puntos enteros. Nunca es menos de 1.',
+  },
+  {
     clave: 'puntosPromoDa',
     columna: 'puntos_promo_da',
     grupo: 'puntos',
@@ -428,6 +479,7 @@ export function validarAjuste(def, valor) {
     case 'dinero': {
       if (typeof valor !== 'number' || !Number.isFinite(valor)) return { ok: false, error: `${nombre}: escribe un número` };
       if (valor < def.min || valor > def.max) return { ok: false, error: `${nombre}: debe estar entre ${def.min} y ${def.max}` };
+      if (def.entero && !Number.isInteger(valor)) return { ok: false, error: `${nombre}: usa números enteros` };
       if (!dosDecimales(valor)) return { ok: false, error: `${nombre}: máximo 2 decimales` };
       return { ok: true, valor };
     }

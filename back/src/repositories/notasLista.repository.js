@@ -87,13 +87,14 @@ export async function obtener(db, empresaId, sucursales, id) {
             v.financiada, (v.pin_entrega_hash IS NOT NULL) AS tiene_pin,
             s.nombre AS sucursal_nombre, s.direccion AS sucursal_direccion, s.telefono AS sucursal_telefono,
             COALESCE(s.zona_horaria, e.zona_horaria) AS zona, e.nombre AS empresa_nombre,
-            cj.nombre AS caja_nombre, u.nombre AS cajero_nombre,
+            cj.nombre AS caja_nombre, u.nombre AS cajero_nombre, ro.nivel_jerarquico AS cajero_nivel,
             c.id AS cliente_id, c.nombre AS cliente_nombre, c.telefono AS cliente_telefono
      FROM ventas v
      JOIN sucursales s ON s.id = v.sucursal_id AND s.empresa_id = v.empresa_id
      JOIN empresas e ON e.id = v.empresa_id
      JOIN cajas cj ON cj.id = v.caja_id AND cj.empresa_id = v.empresa_id
      JOIN usuarios u ON u.id = v.usuario_id AND u.empresa_id = v.empresa_id
+     JOIN roles ro ON ro.id = u.rol_id AND ro.empresa_id = u.empresa_id
      LEFT JOIN clientes c ON c.id = v.cliente_id AND c.empresa_id = v.empresa_id
      WHERE v.empresa_id = $1 AND v.id = $2 AND v.sucursal_id = ANY($3::bigint[])`,
     [empresaId, id, sucursales]
@@ -105,9 +106,10 @@ export async function listarPagosConQuien(db, empresaId, ventaId) {
   exigirEmpresa(empresaId);
   const r = await db.query(
     `SELECT p.forma, p.monto, p.recibido, p.cambio, p.referencia, p.creado_en,
-            u.nombre AS cobro, cj.nombre AS caja, p.turno_id
+            u.nombre AS cobro, ru.nivel_jerarquico AS cobro_nivel, cj.nombre AS caja, p.turno_id
      FROM venta_pagos p
      JOIN usuarios u ON u.id = p.usuario_id AND u.empresa_id = p.empresa_id
+     JOIN roles ru ON ru.id = u.rol_id AND ru.empresa_id = u.empresa_id
      JOIN cajas cj ON cj.id = p.caja_id AND cj.empresa_id = p.empresa_id
      WHERE p.empresa_id = $1 AND p.venta_id = $2
      ORDER BY p.creado_en, p.id`,
@@ -199,9 +201,10 @@ export async function insertarPagosDeCobro(db, empresaId, c, pagos) {
 export async function pagosDeCobro(db, empresaId, cobroId) {
   exigirEmpresa(empresaId);
   const r = await db.query(
-    `SELECT p.forma, p.monto, p.recibido, p.cambio, p.referencia, p.creado_en, u.nombre AS cobro, cj.nombre AS caja
+    `SELECT p.forma, p.monto, p.recibido, p.cambio, p.referencia, p.creado_en, u.nombre AS cobro, ru.nivel_jerarquico AS cobro_nivel, cj.nombre AS caja
      FROM venta_pagos p
      JOIN usuarios u ON u.id = p.usuario_id AND u.empresa_id = p.empresa_id
+     JOIN roles ru ON ru.id = u.rol_id AND ru.empresa_id = u.empresa_id
      JOIN cajas cj ON cj.id = p.caja_id AND cj.empresa_id = p.empresa_id
      WHERE p.empresa_id = $1 AND p.cobro_id = $2 ORDER BY p.creado_en, p.id`,
     [empresaId, cobroId]

@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import { COLUMNAS_POR_DEFECTO, COLUMNAS_REPORTE } from '@plataforma/calculos';
+import { COLUMNAS_POR_DEFECTO, COLUMNAS_REPORTE, COLUMNAS_SOLO_LIMPIEZA } from '@plataforma/calculos';
 
 const CLAVE = 'reporte_ventas_columnas';
 const VALIDAS = new Set(COLUMNAS_REPORTE.map((c) => c.id));
-// Sin servicios no tienen sentido
-const SOLO_LIMPIEZA = ['entrega', 'financiamiento'];
 
 function leer() {
   try {
@@ -25,7 +23,7 @@ export function useColumnasReporte(esLimpieza) {
     localStorage.setItem(CLAVE, JSON.stringify(nuevas));
   };
 
-  const disponibles = COLUMNAS_REPORTE.filter((c) => esLimpieza || !SOLO_LIMPIEZA.includes(c.id));
+  const disponibles = COLUMNAS_REPORTE.filter((c) => esLimpieza || !COLUMNAS_SOLO_LIMPIEZA.includes(c.id));
   const elegidas = disponibles.filter((c) => ids.includes(c.id));
 
   return {

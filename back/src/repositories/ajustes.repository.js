@@ -125,11 +125,13 @@ export async function cargarAjuste(db, empresaId, id) {
   exigirEmpresa(empresaId);
   const a = await db.query(
     `SELECT a.id, a.tipo, a.motivo, a.valor_cancelado, a.tope, a.devuelto, a.retenido, a.creado_en,
-            u.nombre AS hizo, au.nombre AS autorizo, cj.nombre AS caja
+            u.nombre AS hizo, ru.nivel_jerarquico AS hizo_nivel, au.nombre AS autorizo, rau.nivel_jerarquico AS autorizo_nivel, cj.nombre AS caja
      FROM venta_ajustes a
      JOIN usuarios u ON u.id = a.usuario_id AND u.empresa_id = a.empresa_id
+     JOIN roles ru ON ru.id = u.rol_id AND ru.empresa_id = u.empresa_id
      JOIN cajas cj ON cj.id = a.caja_id AND cj.empresa_id = a.empresa_id
      LEFT JOIN usuarios au ON au.id = a.autorizado_por AND au.empresa_id = a.empresa_id
+     LEFT JOIN roles rau ON rau.id = au.rol_id AND rau.empresa_id = au.empresa_id
      WHERE a.empresa_id = $1 AND a.id = $2`,
     [empresaId, id]
   );

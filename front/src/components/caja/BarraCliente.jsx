@@ -2,7 +2,7 @@ import { formatearTelefono } from '../../utils/formato.js';
 import Icono from '../shared/Icono.jsx';
 
 // cliente: { envio, vista } o null · onAbrir busca o cambia al cliente · onCompletar abre sus datos y su PIN
-export default function BarraCliente({ cliente, onAbrir, onCompletar }) {
+export default function BarraCliente({ cliente, puntos = null, onAbrir, onCompletar }) {
   const v = cliente?.vista;
   const falta = v?.perfil && !v.perfil.completo ? v.perfil.falta : null;
 
@@ -45,6 +45,7 @@ export default function BarraCliente({ cliente, onAbrir, onCompletar }) {
           ) : (
             <p className="text-xs text-emerald-700">Perfil completo</p>
           )}
+          {v.id && puntos?.saldo > 0 && <span className="text-xs font-semibold text-[var(--c-primario)] shrink-0">{puntos.saldo} puntos</span>}
         </div>
       )}
     </div>

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { validar } from '../middlewares/validar.js';
 import { requerirPermiso } from '../middlewares/requerirPermiso.js';
-import { catalogoQuery, escanearQuery, sugerenciasQuery, crearVentaBody } from '../validators/ventas.validator.js';
+import { catalogoQuery, escanearQuery, sugerenciasQuery, crearVentaBody, canjeQuery } from '../validators/ventas.validator.js';
 import { idParams, listaQuery, cobrarBody, estadoBody, correccionBody } from '../validators/notas.validator.js';
 import * as ctrl from '../controllers/caja.controller.js';
 import * as ctrlServicios from '../controllers/cajaServicios.controller.js';
@@ -13,6 +13,7 @@ import * as ctrlEntregas from '../controllers/entregas.controller.js';
 import { cancelarBody, reembolsarBody } from '../validators/ajustes.validator.js';
 import * as ctrlAjustes from '../controllers/ajustes.controller.js';
 import * as ctrlPromos from '../controllers/cajaPromociones.controller.js';
+import * as ctrlCanje from '../controllers/canjePuntos.controller.js';
 
 const router = Router();
 
@@ -24,6 +25,7 @@ router.get('/configuracion', ctrlServicios.configuracion);
 router.get('/servicios', validar({ query: catalogoQuery }), ctrlServicios.servicios);
 router.get('/sugerencias', validar({ query: sugerenciasQuery }), ctrlServicios.sugerencias);
 router.get('/promociones', ctrlPromos.vigentes);
+router.get('/canje', validar({ query: canjeQuery }), ctrlCanje.consultar);
 router.post('/ventas', validar({ body: crearVentaBody }), ctrl.crearVenta);
 router.get('/ventas', validar({ query: ventasListaQuery }), ctrlVentas.listar);
 router.get('/ventas/:id', validar({ params: idParams }), ctrlVentas.obtener);

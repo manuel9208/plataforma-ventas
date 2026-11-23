@@ -356,7 +356,7 @@ export default function DetalleNota({ id, accionInicial, onVolver, onOperando })
               <p className="font-semibold">{nota.cliente ? nota.cliente.nombre : 'Sin cliente'}</p>
               {nota.cliente && <p className="text-sm text-neutral-500">{formatearTelefono(nota.cliente.telefono)}</p>}
               <p className="text-xs text-neutral-400 mt-1">
-                {nota.sucursal} · {nota.caja} · {nota.cajero}
+                {[nota.sucursal, nota.caja, nota.cajero].filter(Boolean).join(' · ')}
               </p>
               <p className="text-xs text-neutral-400">Recibida {formatearFechaHora(nota.creadaEn, nota.zonaHoraria)}</p>
               {nota.financiada && <p className="text-xs font-medium text-amber-700 mt-0.5">Nota financiada</p>}

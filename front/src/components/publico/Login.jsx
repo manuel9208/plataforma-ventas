@@ -52,7 +52,7 @@ export default function Login() {
           <h1 className="text-2xl font-semibold tracking-tight text-center">Bienvenido</h1>
           <p className="text-neutral-500 text-center mt-1 mb-6">Inicia sesión para continuar</p>
 
-          <Campo etiqueta="Teléfono" type="tel" inputMode="numeric" placeholder="10 dígitos" value={u} onChange={(e) => setU(e.target.value)} autoComplete="tel" required />
+          <Campo etiqueta="Teléfono" type="tel" inputMode="numeric" maxLength={10} placeholder="10 dígitos" value={u} onChange={(e) => setU(e.target.value.replace(/\D/g, '').slice(0, 10))} autoComplete="tel" required />
           <Campo className="mt-4" etiqueta="Contraseña" type="password" value={p} onChange={(e) => setP(e.target.value)} autoComplete="current-password" required />
 
           <div className="mt-4">

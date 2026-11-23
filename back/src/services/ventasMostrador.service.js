@@ -9,7 +9,7 @@ import * as listaRepo from '../repositories/notasLista.repository.js';
 import * as ventasRepo from '../repositories/ventas.repository.js';
 import * as turnosRepo from '../repositories/turnos.repository.js';
 import { autorizar } from './autorizacion.service.js';
-import { revertirSeguro } from './puntos.service.js';
+import { devolverCanjePorDevolucion, revertirSeguro } from './puntos.service.js';
 import { ventaLista, ventaDetalle, comprobanteDevolucion } from '../serializers/ventasMostrador.serializer.js';
 
 const PERMISO_AUTORIZAR = 'notas.cancelar';
@@ -169,6 +169,16 @@ export async function devolver(actor, ventaId, datos, ip) {
       retenido: plan.retenido,
     });
     if (!creada) throw new ErrorHttp(409, 'Esta operación ya se registró');
+
+    // Los puntos usados en lo devuelto regresan al cliente (antes de sumar lo devuelto a los renglones)
+    await devolverCanjePorDevolucion(db, {
+      empresaId: e,
+      sucursalId: t.sucursal_id,
+      ventaId,
+      lineas: plan.lineas.map((l) => ({ partidaId: l.partidaId, valor: l.valor })),
+      clave: `canjedev:${datos.id}`,
+      usuarioId: actor.id,
+    });
 
     for (const l of plan.lineas) {
       await repo.registrarDevolucion(db, e, { ajusteId: datos.id, ventaId, partidaId: l.partidaId, cantidad: l.cantidad, valor: l.valor });

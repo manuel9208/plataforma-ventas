@@ -1,4 +1,5 @@
 import { cantidadDisponible, permiteDecimales, resumenNota } from '@plataforma/calculos';
+import { nombreParaTicket } from '../utils/atendio.js';
 
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 
@@ -57,7 +58,7 @@ export function ventaDetalle(v, productos, pagos, reembolsos) {
     empresa: v.empresa_nombre,
     sucursal: v.sucursal_nombre,
     caja: v.caja_nombre,
-    cajero: v.cajero_nombre,
+    cajero: nombreParaTicket(v.cajero_nombre, v.cajero_nivel),
     cliente: v.cliente_id ? { id: v.cliente_id, nombre: v.cliente_nombre, telefono: v.cliente_telefono } : null,
     total, // lo que costó la venta
     devuelto: cancelado,

@@ -32,6 +32,7 @@ import * as configRepo from '../repositories/configuracion.repository.js';
 import { guardarArticulosDeCliente } from './clienteArticulos.service.js';
 import { otorgarSeguro } from './puntos.service.js';
 import { venta as serializarVenta } from '../serializers/ventas.serializer.js';
+import { autorizarCanje, aplicarCanje, registrarCanje } from './canjePuntos.service.js';
 
 const MAX_DIAS_PROMESA = 365;
 // Suma dos importes; si alguno no está desglosado (null), el resultado tampoco
@@ -213,7 +214,6 @@ export async function crear(actor, datos, ip) {
   const { servicios: serviciosPedidos, grupos } = datos.articulos?.length
     ? aplanarArticulos(datos.articulos)
     : { servicios: datos.servicios, grupos: [] };
-  if (serviciosPedidos.length > 50) throw new ErrorHttp(400, 'Demasiados servicios en una sola nota');
   datos = { ...datos, servicios: serviciosPedidos };
 
   // El PIN solo existe si hay servicios; se guarda cifrado y se devuelve una única vez
@@ -226,6 +226,9 @@ export async function crear(actor, datos, ip) {
     if (!(await moduloActivo(e, 'promociones'))) throw new ErrorHttp(403, 'Este módulo no está activo en tu plan');
     autorizo = await autorizar(actor, turno.sucursal_id, datos.descuentos.autorizacion, 'caja.descuentos');
   }
+
+  // Canje de puntos: lo autoriza el cliente con su PIN o un encargado
+  const autorizoCanje = datos.canje ? await autorizarCanje(actor, turno.sucursal_id, datos) : null;
 
   try {
     return await conTransaccion(async (db) => {
@@ -255,7 +258,7 @@ export async function crear(actor, datos, ip) {
       const serviciosBase = await armarServicios(db, e, sucursalId, hoy, datos.servicios, config.camposArticulo, incluyeIva);
 
       // Promociones vigentes y descuento manual: el servidor decide los precios finales
-      const { productos, servicios: serviciosConPromo, aplicadas } = await aplicarPromocionesVenta(db, {
+      const { productos: productosPromo, servicios: serviciosPromo, aplicadas } = await aplicarPromocionesVenta(db, {
         empresaId: e,
         sucursalId,
         zona: turno.zona,
@@ -266,6 +269,21 @@ export async function crear(actor, datos, ip) {
         incluyeIva,
         autorizoId: autorizo?.id ?? null,
       });
+
+      // Puntos: se rebajan las partidas después de las promociones y antes del cargo de financiamiento
+      const conCanje = datos.canje
+        ? await aplicarCanje(db, {
+            empresaId: e,
+            sucursalId,
+            clienteId: datos.clienteId,
+            puntos: datos.canje.puntos,
+            productos: productosPromo,
+            servicios: serviciosPromo,
+            incluyeIva,
+          })
+        : null;
+      const productos = conCanje?.productos ?? productosPromo;
+      const serviciosConPromo = conCanje?.servicios ?? serviciosPromo;
 
       // El cargo ya incluye IVA y no recibe promociones ni descuentos: se suma al total de cada servicio (los extras no llevan cargo)
       const servicios =
@@ -405,7 +423,11 @@ export async function crear(actor, datos, ip) {
       await repo.insertarPagos(db, e, { id: datos.id, turnoId: t.id, cajaId: t.caja_id, usuarioId: actor.id }, pagos);
 
       // Puntos de los productos (los de servicios se ganan al entregar). Si falla, el cobro no se detiene.
-      const puntos = await otorgarSeguro(db, {
+      if (conCanje) {
+        await registrarCanje(db, { empresaId: e, sucursalId, clienteId: datos.clienteId, ventaId: datos.id, usuarioId: actor.id, canje: conCanje.canje });
+      }
+      // Una compra pagada con puntos no gana puntos
+      const puntos = conCanje ? null : await otorgarSeguro(db, {
         empresaId: e,
         sucursalId,
         clienteId,
@@ -435,6 +457,7 @@ export async function crear(actor, datos, ip) {
           financiada,
           descuentos: aplicadas,
           descuentoManual: datos.descuentos ? { motivo: datos.descuentos.motivo, autorizadoPor: autorizo.id } : null,
+          canje: conCanje ? { puntos: conCanje.canje.puntos, descuento: conCanje.canje.descuento, metodo: autorizoCanje.metodo, autorizadoPor: autorizoCanje.autorizoId } : null,
           pagos: pagos.map((p) => ({ forma: p.forma, monto: p.monto })),
         },
         ip,

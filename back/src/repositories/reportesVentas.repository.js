@@ -49,7 +49,8 @@ const FROM = `
   ) rb ON TRUE
   LEFT JOIN LATERAL (
     SELECT COALESCE(sum(vp.descuento) FILTER (WHERE vp.descuento_origen = 'promocion'), 0) AS promo,
-           COALESCE(sum(vp.descuento) FILTER (WHERE vp.descuento_origen = 'manual'), 0) AS manual
+           COALESCE(sum(vp.descuento) FILTER (WHERE vp.descuento_origen = 'manual'), 0) AS manual,
+           COALESCE(sum(vp.descuento_puntos), 0) AS puntos
     FROM venta_partidas vp WHERE vp.empresa_id = v.empresa_id AND vp.venta_id = v.id
   ) ds ON TRUE
   LEFT JOIN LATERAL (
@@ -103,7 +104,7 @@ export async function listar(db, empresaId, sucursales, f, { orden, direccion, l
             c.nombre AS cliente_nombre, c.telefono AS cliente_telefono,
             ${VALOR_SQL} AS valor, ${PAGADO_SQL} AS abonado, ${SALDO_SQL} AS saldo,
             (pg.efectivo - rb.efectivo) AS efectivo, (pg.tarjeta - rb.tarjeta) AS tarjeta, (pg.transferencia - rb.transferencia) AS transferencia,
-            ds.promo AS descuento_promocion, ds.manual AS descuento_manual, fi.financiamiento,
+            ds.promo AS descuento_promocion, ds.manual AS descuento_manual, ds.puntos AS puntos_usados, fi.financiamiento,
             sv.articulos, sv.en_espera, sv.listos, sv.entregados, sv.cancelados,
             to_char(sv.prometida, 'YYYY-MM-DD') AS prometida
      ${FROM} ${where}
@@ -129,6 +130,7 @@ export async function totalesPorSucursal(db, empresaId, sucursales, f) {
             COALESCE(sum(v.iva), 0) AS iva,
             COALESCE(sum(ds.promo), 0) AS descuento_promocion,
             COALESCE(sum(ds.manual), 0) AS descuento_manual,
+            COALESCE(sum(ds.puntos), 0) AS puntos_usados,
             COALESCE(sum(fi.financiamiento), 0) AS financiamiento,
             count(*) FILTER (WHERE ${CANCELADA}) AS canceladas
      ${FROM} ${where}
@@ -437,4 +439,180 @@ export async function detalleDeVenta(db, empresaId, sucursales, ventaId) {
     [empresaId, ventaId]
   );
   return { venta: v.rows[0], partidas: p.rows };
+}
+
+// ---------- Análisis ----------
+export async function ventasPorEmpleado(db, empresaId, sucursales, f) {
+  exigirEmpresa(empresaId);
+  const params = base(empresaId, sucursales, f);
+  const where = filtro(f, params);
+  const r = await db.query(
+    `SELECT v.usuario_id AS id, max(u.nombre) AS nombre, count(*) AS notas,
+            count(*) FILTER (WHERE ${CANCELADA}) AS canceladas,
+            COALESCE(sum(${VALOR_SQL}), 0) AS vendido,
+            COALESCE(sum(${SALDO_SQL}) FILTER (WHERE NOT ${CANCELADA}), 0) AS pendiente
+     ${FROM} ${where}
+     GROUP BY v.usuario_id
+     ORDER BY vendido DESC, nombre
+     LIMIT 50`,
+    params
+  );
+  return r.rows;
+}
+
+// Día de la semana según la hora local de cada sucursal (ISO: 1 = lunes … 7 = domingo)
+export async function ventasPorDiaSemana(db, empresaId, sucursales, f) {
+  exigirEmpresa(empresaId);
+  const params = base(empresaId, sucursales, f);
+  const where = filtro(f, params);
+  const r = await db.query(
+    `SELECT EXTRACT(ISODOW FROM (v.creado_en AT TIME ZONE ${ZONA}))::int AS dia,
+            count(*) AS notas, COALESCE(sum(${VALOR_SQL}), 0) AS vendido
+     ${FROM} ${where}
+     GROUP BY 1`,
+    params
+  );
+  return r.rows;
+}
+
+// "Nuevo" = su registro se creó dentro del periodo
+const CLIENTE_NUEVO = `(c.creado_en AT TIME ZONE ${ZONA})::date BETWEEN $3::date AND $4::date`;
+
+export async function clientesDelPeriodo(db, empresaId, sucursales, f) {
+  exigirEmpresa(empresaId);
+  const params = base(empresaId, sucursales, f);
+  const where = filtro(f, params);
+  const r = await db.query(
+    `SELECT count(*) FILTER (WHERE v.cliente_id IS NULL) AS sin_cliente,
+            COALESCE(sum(${VALOR_SQL}) FILTER (WHERE v.cliente_id IS NULL), 0) AS vendido_sin_cliente,
+            count(DISTINCT v.cliente_id) FILTER (WHERE v.cliente_id IS NOT NULL AND ${CLIENTE_NUEVO}) AS nuevos,
+            COALESCE(sum(${VALOR_SQL}) FILTER (WHERE v.cliente_id IS NOT NULL AND ${CLIENTE_NUEVO}), 0) AS vendido_nuevos,
+            count(DISTINCT v.cliente_id) FILTER (WHERE v.cliente_id IS NOT NULL AND NOT ${CLIENTE_NUEVO}) AS recurrentes,
+            COALESCE(sum(${VALOR_SQL}) FILTER (WHERE v.cliente_id IS NOT NULL AND NOT ${CLIENTE_NUEVO}), 0) AS vendido_recurrentes
+     ${FROM} ${where}`,
+    params
+  );
+  return r.rows[0] ?? {};
+}
+
+// Cancelaciones, devoluciones y reembolsos hechos en el periodo (por la fecha en que se hicieron).
+// El empleado es quien los hizo; el estado de la nota no aplica aquí.
+function filtroAjustes(f, params) {
+  let sql = `
+  FROM venta_ajustes a
+  JOIN ventas v ON v.id = a.venta_id AND v.empresa_id = a.empresa_id
+  JOIN sucursales s ON s.id = v.sucursal_id AND s.empresa_id = v.empresa_id
+  JOIN empresas e ON e.id = v.empresa_id
+  WHERE a.empresa_id = $1 AND v.sucursal_id = ANY($2::bigint[])
+    AND a.creado_en >= ($3::date - 1) AND a.creado_en < ($4::date + 2)
+    AND (a.creado_en AT TIME ZONE ${ZONA})::date BETWEEN $3::date AND $4::date`;
+  if (f.giro === 'servicios') sql += ' AND v.tiene_servicios';
+  if (f.giro === 'productos') sql += ' AND NOT v.tiene_servicios';
+  if (f.empleadoId) {
+    params.push(f.empleadoId);
+    sql += ` AND a.usuario_id = $${params.length}`;
+  }
+  return sql;
+}
+
+export async function ajustesDelPeriodo(db, empresaId, sucursales, f) {
+  exigirEmpresa(empresaId);
+  const params = base(empresaId, sucursales, f);
+  const r = await db.query(
+    `SELECT a.tipo, v.tiene_servicios, count(*) AS operaciones,
+            COALESCE(sum(a.valor_cancelado), 0) AS cancelado,
+            COALESCE(sum(a.devuelto), 0) AS devuelto,
+            COALESCE(sum(a.retenido), 0) AS retenido
+     ${filtroAjustes(f, params)}
+     GROUP BY a.tipo, v.tiene_servicios`,
+    params
+  );
+  return r.rows;
+}
+
+// Los motivos que más se repiten (el motivo es texto libre: se juntan sin importar mayúsculas)
+export async function motivosDeAjustes(db, empresaId, sucursales, f) {
+  exigirEmpresa(empresaId);
+  const params = base(empresaId, sucursales, f);
+  const r = await db.query(
+    `SELECT min(a.motivo) AS motivo, count(*) AS veces, COALESCE(sum(a.devuelto), 0) AS devuelto
+     ${filtroAjustes(f, params)}
+     GROUP BY lower(btrim(a.motivo))
+     ORDER BY veces DESC, 1
+     LIMIT 5`,
+    params
+  );
+  return r.rows;
+}
+
+// Lo que se debe HOY: no depende del periodo ni del estado, solo de las sucursales (y del empleado si se eligió)
+const EDAD_EN_DIAS = `((now() AT TIME ZONE ${ZONA})::date - (v.creado_en AT TIME ZONE ${ZONA})::date)`;
+const NOTAS_CON_SALDO = (extra) => `
+  FROM ventas v
+  JOIN sucursales s ON s.id = v.sucursal_id AND s.empresa_id = v.empresa_id
+  JOIN empresas e ON e.id = v.empresa_id
+  LEFT JOIN clientes c ON c.id = v.cliente_id AND c.empresa_id = v.empresa_id
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(sum(p.monto), 0) AS pagado FROM venta_pagos p WHERE p.empresa_id = v.empresa_id AND p.venta_id = v.id
+  ) pg ON TRUE
+  WHERE v.empresa_id = $1 AND v.sucursal_id = ANY($2::bigint[]) AND v.tiene_servicios
+    AND NOT ${CANCELADA} AND ${SALDO_SQL} > 0${extra}`;
+
+export async function cobranzaActual(db, empresaId, sucursales, f) {
+  exigirEmpresa(empresaId);
+  const params = [empresaId, sucursales];
+  let extra = '';
+  if (f.empleadoId) {
+    params.push(f.empleadoId);
+    extra = ` AND v.usuario_id = $3`;
+  }
+  const [porEdad, masAtrasadas] = await Promise.all([
+    db.query(
+      `SELECT ${EDAD_EN_DIAS} AS dias, count(*) AS notas, COALESCE(sum(${SALDO_SQL}), 0) AS monto
+       ${NOTAS_CON_SALDO(extra)} GROUP BY 1`,
+      params
+    ),
+    db.query(
+      `SELECT v.id, v.folio, s.nombre AS sucursal, c.nombre AS cliente, c.telefono,
+              ${SALDO_SQL} AS saldo, ${EDAD_EN_DIAS} AS dias
+       ${NOTAS_CON_SALDO(extra)}
+       ORDER BY dias DESC, saldo DESC, v.id
+       LIMIT 10`,
+      params
+    ),
+  ]);
+  return { porEdad: porEdad.rows, masAtrasadas: masAtrasadas.rows };
+}
+
+// Descuentos de lo vigente: por promoción y los manuales por quien los autorizó
+export async function descuentosDados(db, empresaId, sucursales, f) {
+  exigirEmpresa(empresaId);
+  const params = base(empresaId, sucursales, f);
+  const r = await db.query(
+    `${ventasFiltradas(f, params)}
+     SELECT vp.descuento_origen AS origen, vp.promocion_nombre AS nombre,
+            vp.descuento_autorizado_por AS autorizo_id, max(u.nombre) AS autorizo_nombre,
+            count(*) AS lineas, COALESCE(sum(vp.descuento), 0) AS descuento
+     FROM venta_partidas vp
+     JOIN vf ON vf.id = vp.venta_id
+     LEFT JOIN usuarios u ON u.id = vp.descuento_autorizado_por AND u.empresa_id = vp.empresa_id
+     WHERE vp.empresa_id = $1 AND vp.descuento > 0 AND vp.ajuste_id IS NULL
+     GROUP BY vp.descuento_origen, vp.promocion_nombre, vp.descuento_autorizado_por
+     ORDER BY descuento DESC
+     LIMIT 100`,
+    params
+  );
+  return r.rows;
+}
+
+// Zona horaria de una sucursal (para escribir la hora en que se generó el reporte)
+export async function zonaDeSucursal(db, empresaId, sucursalId) {
+  exigirEmpresa(empresaId);
+  const r = await db.query(
+    `SELECT COALESCE(s.zona_horaria, e.zona_horaria) AS zona
+     FROM sucursales s JOIN empresas e ON e.id = s.empresa_id
+     WHERE s.empresa_id = $1 AND s.id = $2`,
+    [empresaId, sucursalId]
+  );
+  return r.rows[0]?.zona ?? 'UTC';
 }

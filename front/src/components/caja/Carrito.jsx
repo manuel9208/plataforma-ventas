@@ -291,6 +291,20 @@ export default function Carrito({
             <span>{dinero(carrito.ahorro)}</span>
           </div>
         )}
+        {carrito.puntos.actual && (
+          <div className="flex justify-between text-sm font-medium text-emerald-700">
+            <span>Puntos ({carrito.puntos.actual.puntos})</span>
+            <span>−{dinero(carrito.puntos.actual.descuento)}</span>
+          </div>
+        )}
+        {carrito.puntos.error && (
+          <div className="rounded-xl bg-amber-50 text-amber-800 text-xs p-3 mt-2">
+            Los puntos ya no aplican: {carrito.puntos.error}{' '}
+            <button type="button" onClick={carrito.puntos.quitar} className="font-semibold underline underline-offset-2">
+              Quitar puntos
+            </button>
+          </div>
+        )}
         {carrito.puedeFinanciar && carrito.tieneServicios && (
           <div className="pb-2">
             <Interruptor
@@ -319,7 +333,7 @@ export default function Carrito({
           </div>
         )}
 
-        <Boton className="w-full mt-3" disabled={carrito.vacio || carrito.faltaAutorizacion} onClick={onCobrar}>
+        <Boton className="w-full mt-3" disabled={carrito.vacio || carrito.faltaAutorizacion || Boolean(carrito.puntos.error)} onClick={onCobrar}>
           {carrito.tieneServicios ? (carrito.financiada ? 'Cobrar financiado' : 'Cobrar abono') : 'Cobrar'}
         </Boton>
       </div>

@@ -1,3 +1,5 @@
+import { nombreParaTicket } from '../utils/atendio.js';
+
 // Comprobante de cancelación o reembolso. Nunca lleva PIN.
 export function comprobante(detalle, { ajuste, partidas, reembolso }, repetido = false) {
   return {
@@ -9,7 +11,8 @@ export function comprobante(detalle, { ajuste, partidas, reembolso }, repetido =
     sucursal: detalle.sucursal,
     zonaHoraria: detalle.zonaHoraria,
     caja: ajuste.caja,
-    hizo: ajuste.hizo,
+    hizo: ajuste.hizo,    hizo: nombreParaTicket(ajuste.hizo, ajuste.hizo_nivel),
+    autorizo: nombreParaTicket(ajuste.autorizo, ajuste.autorizo_nivel),
     autorizo: ajuste.autorizo,
     motivo: ajuste.motivo,
     creadoEn: ajuste.creado_en,

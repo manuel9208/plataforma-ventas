@@ -9,3 +9,4 @@ export const crearVenta = (datos) => apiFetch('/caja/ventas', { metodo: 'POST', 
 export const promociones = () => apiFetch('/caja/promociones');
 // Para buscar clientes se reutiliza la API de clientes
 export { listar as buscarClientes } from './clientes.service.js';
+export const canje = (clienteId) => apiFetch('/caja/canje', { query: { clienteId } });

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ESTADOS_REPORTE, GIROS_REPORTE, ORDENES_REPORTE, TIPOS_PERIODO, validarRango } from '@plataforma/calculos';
+import { COLUMNAS_REPORTE, ESTADOS_REPORTE, GIROS_REPORTE, ORDENES_REPORTE, TIPOS_PERIODO, validarRango } from '@plataforma/calculos';
 import { fecha } from './comunes.validator.js';
 
 const filtros = z.object({
@@ -46,3 +46,32 @@ export const consumoQuery = filtros
   .refine(rangoOk, rangoError);
 
 export const detalleParams = z.object({ id: z.string().uuid('Venta inválida') });
+
+// El análisis usa los mismos filtros que la tabla, sin orden ni páginas
+export const analisisQuery = filtros
+  .omit({ orden: true, direccion: true, limite: true, pagina: true })
+  .refine(rangoOk, rangoError);
+
+  const IDS_COLUMNAS = new Set(COLUMNAS_REPORTE.map((c) => c.id));
+
+export const exportarParams = z.object({ formato: z.enum(['pdf', 'excel']) });
+
+// Lo mismo que ve la pantalla, sin páginas: el archivo lleva todo (hasta 5,000 notas)
+export const exportarQuery = filtros
+  .omit({ limite: true, pagina: true })
+  .extend({
+    periodo: z.enum(TIPOS_PERIODO),
+    hastaHoy: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((v) => v === 'true'),
+    ordenConsumo: z.enum(['cantidad', 'dinero']).default('cantidad'),
+    // Las columnas que la persona eligió en pantalla, separadas por coma
+    columnas: z
+      .string()
+      .regex(/^[a-zA-Z]{2,30}(,[a-zA-Z]{2,30})*$/, 'Columnas inválidas')
+      .transform((s) => s.split(','))
+      .refine((l) => l.length <= 30 && l.every((id) => IDS_COLUMNAS.has(id)), 'Columnas inválidas')
+      .optional(),
+  })
+  .refine(rangoOk, rangoError);

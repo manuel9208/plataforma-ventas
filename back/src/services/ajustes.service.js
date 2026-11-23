@@ -7,7 +7,7 @@ import * as listaRepo from '../repositories/notasLista.repository.js';
 import * as ventasRepo from '../repositories/ventas.repository.js';
 import * as turnosRepo from '../repositories/turnos.repository.js';
 import { autorizar } from './autorizacion.service.js';
-import { revertirSeguro } from './puntos.service.js';
+import { devolverCanjePorCancelacion, revertirSeguro } from './puntos.service.js';
 import { cargarDetalle } from './notas.service.js';
 import { comprobante } from '../serializers/ajustes.serializer.js';
 
@@ -163,6 +163,18 @@ export async function cancelar(actor, ventaId, datos, ip) {
     if (productos.length) {
       await revertirSeguro(db, { empresaId: e, sucursalId: t.sucursal_id, ventaId, origen: 'venta', baseDevuelta: aMonto(sumaC(productos)), clave: `reversa:${datos.id}`, usuarioId: actor.id });
     }
+
+    // Los puntos usados en lo cancelado regresan al cliente (menos la parte que la tienda retiene)
+    await devolverCanjePorCancelacion(db, {
+      empresaId: e,
+      sucursalId: t.sucursal_id,
+      ventaId,
+      partidaIds: elegidas.map((f) => f.id),
+      cancelado: plan.cancelado,
+      retenido: plan.retenido,
+      clave: `canjedev:${datos.id}`,
+      usuarioId: actor.id,
+    });
 
     // La bitácora nunca lleva PIN
     await registrarBitacora(db, {

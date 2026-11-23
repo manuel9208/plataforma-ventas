@@ -35,7 +35,7 @@ export default function TicketVenta({ venta, onNueva, esCopia = false, onVolver 
           {empresa.nombre} · {venta.sucursal}
         </p>
         <p className="text-center text-xs text-neutral-400">
-          {formatearFechaHora(venta.creadaEn, venta.zonaHoraria)} · {venta.caja} · {venta.cajero}
+          {[formatearFechaHora(venta.creadaEn, venta.zonaHoraria), venta.caja, venta.cajero].filter(Boolean).join(' · ')}
         </p>
         {venta.cliente && (
           <p className="text-center text-sm text-neutral-600 mt-2">
@@ -120,6 +120,12 @@ export default function TicketVenta({ venta, onNueva, esCopia = false, onVolver 
             <div className="flex justify-between font-medium text-emerald-700">
               <span>Ahorraste</span>
               <span>{dinero(ahorro)}</span>
+            </div>
+          )}
+          {venta.canje && (
+            <div className="flex justify-between font-medium text-emerald-700">
+              <span>Pagado con {venta.canje.puntos} puntos (ya descontado)</span>
+              <span>{dinero(venta.canje.descuento)}</span>
             </div>
           )}
           <div className="flex justify-between items-baseline">

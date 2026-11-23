@@ -123,6 +123,7 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
         totalMostrado: carrito.totales.total,
         ...(carrito.descuentoManual ? { descuentos: carrito.descuentoManual } : {}),
         ...(carrito.financiada ? { financiada: true } : {}),
+        ...(carrito.puntos.envio ? { canje: carrito.puntos.envio } : {}),
         ...(cliente ?? {}),
       });
       setTicket(venta);
@@ -140,6 +141,11 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
         carrito.limpiarAutorizacion();
         setCobrando(false);
         setAviso(e.message);
+      } else if (carrito.puntos.envio && /punto|pin|encargado|autoriz|promociones|intentos/i.test(e.message)) {
+        // El canje no pasó: se quita y el cajero lo vuelve a pedir con los datos al día
+        carrito.puntos.quitar();
+        carrito.puntos.recargar();
+        setErrorCobro(e.message);
       } else {
         setErrorCobro(e.message);
       }
@@ -181,7 +187,12 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
       <div className="lg:grid lg:grid-cols-[1fr_24rem] lg:gap-6 items-start">
         <section>
           {enServicios && (
-            <BarraCliente cliente={carrito.cliente} onAbrir={() => setEligiendoCliente(true)} onCompletar={() => setCompletando(true)} />
+            <BarraCliente
+              cliente={carrito.cliente}
+              puntos={carrito.puntos.info}
+              onAbrir={() => setEligiendoCliente(true)}
+              onCompletar={() => setCompletando(true)}
+            />
           )}
           <form onSubmit={buscarCodigo} className="mb-3 flex gap-2">
             <div className="relative flex-1">
@@ -281,6 +292,9 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
           financiada={carrito.financiada}
           config={config}
           clienteInicial={carrito.cliente}
+          puntos={carrito.puntos}
+          puedeAutorizar={promos.puedeAutorizar}
+          onCliente={carrito.ponerCliente}
           enviando={enviando}
           error={errorCobro}
           onConfirmar={cobrar}

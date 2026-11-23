@@ -15,6 +15,7 @@ import * as repo from '../repositories/reportesVentas.repository.js';
 import { hoy as hoyDeSucursal } from '../repositories/puntos.repository.js';
 import { respuestaVentas } from '../serializers/reportesVentas.serializer.js';
 import { detalleVenta as serializarDetalle, respuestaConsumo, resumenesPorVenta } from '../serializers/consumoVentas.serializer.js';
+import { respuestaAnalisis } from '../serializers/analisisVentas.serializer.js';
 
 // Cada quien ve solo sus sucursales (administrador y gerente las que tienen asignadas; el AdminGlobal, todas)
 function resolverSucursales(actor, pedidas) {
@@ -159,4 +160,40 @@ export async function detalleVenta(actor, id) {
   const d = await repo.detalleDeVenta(pool, actor.empresaId, actor.sucursales, id);
   if (!d) throw new ErrorHttp(404, 'Venta no encontrada');
   return serializarDetalle(d);
+}
+
+// Resumen, empleados, días de la semana, clientes, cancelaciones, cobranza y descuentos. Mismos filtros que la tabla.
+export async function analisis(actor, _empresa, q) {
+  const e = actor.empresaId;
+  const sucursales = resolverSucursales(actor, q.sucursales);
+  if (!sucursales.length) throw new ErrorHttp(403, 'No tienes sucursales asignadas');
+  const f = { desde: q.desde, hasta: q.hasta, empleadoId: q.empleadoId, estado: q.estado, giro: q.giro };
+
+  // Un periodo en curso promedia solo los días que ya pasaron
+  const hoy = await hoyDeSucursal(pool, e, sucursales[0]);
+  const hastaContado = q.hasta > hoy ? hoy : q.hasta;
+
+  const [grupos, empleados, dias, clientes, ajustes, motivos, cobranza, descuentos] = await Promise.all([
+    repo.totalesPorSucursal(pool, e, sucursales, f),
+    repo.ventasPorEmpleado(pool, e, sucursales, f),
+    repo.ventasPorDiaSemana(pool, e, sucursales, f),
+    repo.clientesDelPeriodo(pool, e, sucursales, f),
+    repo.ajustesDelPeriodo(pool, e, sucursales, f),
+    repo.motivosDeAjustes(pool, e, sucursales, f),
+    repo.cobranzaActual(pool, e, sucursales, f),
+    repo.descuentosDados(pool, e, sucursales, f),
+  ]);
+
+  return respuestaAnalisis({
+    grupos,
+    empleados,
+    dias,
+    clientes,
+    ajustes,
+    motivos,
+    cobranza,
+    descuentos,
+    periodo: { desde: q.desde, hasta: q.hasta },
+    hastaContado,
+  });
 }

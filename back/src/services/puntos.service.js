@@ -5,6 +5,8 @@ import {
   calcularSaldoPuntos,
   estadoPerfil,
   fechaVencimientoPuntos,
+  puntosADevolverCancelacion,
+  puntosADevolverRenglon,
   puntosAReversar,
 } from '@plataforma/calculos';
 import { pool, conTransaccion } from '../config/db.js';
@@ -83,6 +85,8 @@ export const otorgarPorEntregaSeguro = (db, p) =>
   seguro(db, async () => {
     const venta = await repo.clienteDeVenta(db, p.empresaId, p.ventaId);
     if (!venta?.clienteId) return null;
+    // Una compra pagada con puntos no gana puntos
+    if (await repo.ventaTieneCanje(db, p.empresaId, p.ventaId)) return null;
     const filas = await repo.partidasEntregadas(db, p.empresaId, p.partidaIds);
     // La base es lo que costó el servicio con sus extras, sin el cargo de financiamiento
     const lineas = filas.map((f) => ({ base: aMonto(aCentavos(f.total) - aCentavos(f.cargo) + aCentavos(f.extras)), descuento: f.descuento }));
@@ -185,4 +189,55 @@ export async function ajustar(actor, clienteId, { id, puntos, motivo }, ip) {
     }
     return { ...(await armarResumen(db, e, clienteId)), repetido: !nuevo };
   });
+}
+
+// ---------- Devolver puntos usados (cancelaciones y devoluciones) ----------
+// Sin SAVEPOINT: si falla, se deshace todo. Los puntos son del cliente y no deben perderse en silencio.
+// p: { empresaId, sucursalId, ventaId, puntos, clave, usuarioId, motivo }
+async function devolverPuntos(db, p) {
+  const e = p.empresaId;
+  if (p.puntos <= 0) return null;
+  const t = await repo.totalesCanje(db, e, p.ventaId);
+  if (!t.clienteId || t.usados <= 0) return null;
+  const puntos = Math.min(p.puntos, t.usados - t.devueltos);
+  if (puntos <= 0) return null;
+
+  const [cfg, hoy] = await Promise.all([repo.cargarConfig(db, e, p.sucursalId), repo.hoy(db, e, p.sucursalId)]);
+  const nuevo = await repo.insertarMovimiento(db, e, {
+    clienteId: t.clienteId,
+    ventaId: p.ventaId,
+    sucursalId: p.sucursalId,
+    tipo: 'ajuste',
+    origen: 'canje',
+    puntos,
+    venceEn: fechaVencimientoPuntos({ caducidad: cfg.caducidad, meses: cfg.caducidadMeses, fecha: cfg.caducidadFecha }, hoy),
+    motivo: p.motivo,
+    clave: p.clave,
+    usuarioId: p.usuarioId,
+  });
+  return nuevo ? { devueltos: puntos } : null;
+}
+
+// Se canceló parte de una nota: vuelven los puntos usados en lo cancelado, menos lo que la tienda retiene.
+// p: { empresaId, sucursalId, ventaId, partidaIds, cancelado, retenido, clave, usuarioId }
+export async function devolverCanjePorCancelacion(db, p) {
+  const filas = await repo.partidasConCanje(db, p.empresaId, p.partidaIds);
+  const puntosUsados = filas.reduce((s, f) => s + f.puntos, 0);
+  return devolverPuntos(db, {
+    ...p,
+    puntos: puntosADevolverCancelacion({ puntosUsados, cancelado: p.cancelado, retenido: p.retenido }),
+    motivo: 'Se canceló lo que se pagó con puntos',
+  });
+}
+
+// Devolución de productos: llamarla ANTES de sumar lo devuelto a los renglones.
+// p: { empresaId, sucursalId, ventaId, lineas: [{ partidaId, valor }], clave, usuarioId }
+export async function devolverCanjePorDevolucion(db, p) {
+  const filas = await repo.partidasConCanje(db, p.empresaId, p.lineas.map((l) => l.partidaId));
+  const porId = new Map(filas.map((f) => [f.id, f]));
+  const puntos = p.lineas.reduce((s, l) => {
+    const f = porId.get(l.partidaId);
+    return f ? s + puntosADevolverRenglon({ puntosUsados: f.puntos, total: f.total, devueltoAntes: f.valorDevuelto, devueltoAhora: l.valor }) : s;
+  }, 0);
+  return devolverPuntos(db, { ...p, puntos, motivo: 'Se devolvió lo que se pagó con puntos' });
 }

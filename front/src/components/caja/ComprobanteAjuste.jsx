@@ -21,7 +21,7 @@ export default function ComprobanteAjuste({ comprobante: c, onCerrar }) {
           {empresa.nombre} · {c.sucursal}
         </p>
         <p className="text-center text-xs text-neutral-400">
-          {formatearFechaHora(c.creadoEn, c.zonaHoraria)} · {c.caja} · {c.hizo}
+          {[formatearFechaHora(c.creadoEn, c.zonaHoraria), c.caja, c.hizo].filter(Boolean).join(' · ')}
         </p>
         {c.cliente && (
           <p className="text-center text-sm text-neutral-600 mt-2">
@@ -73,10 +73,12 @@ export default function ComprobanteAjuste({ comprobante: c, onCerrar }) {
             <span>Motivo</span>
             <span className="text-right">{c.motivo}</span>
           </div>
-          <div className="flex justify-between gap-3">
-            <span>Autorizó</span>
-            <span className="text-right">{c.autorizo}</span>
-          </div>
+          {c.autorizo && (
+            <div className="flex justify-between gap-3">
+              <span>Autorizó</span>
+              <span className="text-right">{c.autorizo}</span>
+            </div>
+          )}
           <div className="flex justify-between pt-2 mt-2 border-t border-[var(--c-borde)]">
             <span>Ahora la nota vale</span>
             <span>{dinero(c.nota.total)}</span>

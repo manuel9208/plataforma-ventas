@@ -18,7 +18,7 @@ export default function TicketEntrega({ ticket, onCerrar }) {
           {empresa.nombre} · {ticket.sucursal}
         </p>
         <p className="text-center text-xs text-neutral-400">
-          {formatearFechaHora(ticket.entregadaEn, ticket.zonaHoraria)} · {ticket.caja} · {ticket.entrego}
+          {[formatearFechaHora(ticket.entregadaEn, ticket.zonaHoraria), ticket.caja, ticket.entrego].filter(Boolean).join(' · ')}
         </p>
         {ticket.cliente && (
           <p className="text-center text-sm text-neutral-600 mt-2">
@@ -54,12 +54,6 @@ export default function TicketEntrega({ ticket, onCerrar }) {
             <span>Forma</span>
             <span className="text-right">{ETIQUETA_METODO[ticket.metodo]}</span>
           </div>
-          {ticket.autorizo && (
-            <div className="flex justify-between gap-3">
-              <span>Autorizó</span>
-              <span className="text-right">{ticket.autorizo}</span>
-            </div>
-          )}
           {ticket.motivo && (
             <div className="flex justify-between gap-3">
               <span>Motivo</span>

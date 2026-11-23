@@ -17,7 +17,12 @@ export async function cargarConfig(db, empresaId, sucursalId) {
             COALESCE(sc.puntos_caducidad, ec.puntos_caducidad) AS caducidad,
             COALESCE(sc.puntos_caducidad_meses, ec.puntos_caducidad_meses) AS caducidad_meses,
             COALESCE(sc.puntos_caducidad_fecha, ec.puntos_caducidad_fecha) AS caducidad_fecha,
-            COALESCE(sc.puntos_exigir_aviso, ec.puntos_exigir_aviso) AS exigir_aviso
+            COALESCE(sc.puntos_exigir_aviso, ec.puntos_exigir_aviso) AS exigir_aviso,
+            COALESCE(sc.puntos_canjear_productos, ec.puntos_canjear_productos) AS canjear_productos,
+            COALESCE(sc.puntos_canjear_servicios, ec.puntos_canjear_servicios) AS canjear_servicios,
+            COALESCE(sc.puntos_canje_en_promo, ec.puntos_canje_en_promo) AS canje_en_promo,
+            COALESCE(sc.puntos_tope_canje, ec.puntos_tope_canje) AS tope_canje,
+            COALESCE(sc.puntos_minimo_canje, ec.puntos_minimo_canje) AS minimo_canje
      FROM empresa_config ec
      LEFT JOIN sucursal_config sc ON sc.empresa_id = ec.empresa_id AND sc.sucursal_id = $2::bigint
      WHERE ec.empresa_id = $1`,
@@ -38,6 +43,11 @@ export async function cargarConfig(db, empresaId, sucursalId) {
     caducidadMeses: n(f.caducidad_meses),
     caducidadFecha: f.caducidad_fecha,
     exigirAviso: f.exigir_aviso,
+    canjearProductos: f.canjear_productos,
+    canjearServicios: f.canjear_servicios,
+    canjeEnPromo: f.canje_en_promo,
+    topeCanje: n(f.tope_canje),
+    minimoCanje: n(f.minimo_canje),
   };
 }
 
@@ -159,4 +169,49 @@ export async function totalesVenta(db, empresaId, ventaId, origen) {
     baseDevuelta: Number(f.base_devuelta),
     clienteId: f.cliente_id,
   };
+}
+
+// Zona horaria de una sucursal (para escribir la hora en que se generó el reporte)
+export async function zonaDeSucursal(db, empresaId, sucursalId) {
+  exigirEmpresa(empresaId);
+  const r = await db.query(
+    `SELECT COALESCE(s.zona_horaria, e.zona_horaria) AS zona
+     FROM sucursales s JOIN empresas e ON e.id = s.empresa_id
+     WHERE s.empresa_id = $1 AND s.id = $2`,
+    [empresaId, sucursalId]
+  );
+  return r.rows[0]?.zona ?? 'UTC';
+}
+
+// ¿Esta venta ya usó puntos? (una compra pagada con puntos no gana puntos)
+export async function ventaTieneCanje(db, empresaId, ventaId) {
+  exigirEmpresa(empresaId);
+  const r = await db.query(`SELECT 1 FROM puntos_movimientos WHERE empresa_id = $1 AND venta_id = $2 AND tipo = 'canje' LIMIT 1`, [empresaId, ventaId]);
+  return r.rowCount > 0;
+}
+
+// Renglones de una venta que se pagaron en parte con puntos
+export async function partidasConCanje(db, empresaId, ids) {
+  exigirEmpresa(empresaId);
+  if (!ids.length) return [];
+  const r = await db.query(
+    `SELECT id, puntos_canjeados, total, valor_devuelto
+     FROM venta_partidas WHERE empresa_id = $1 AND id = ANY($2::uuid[]) AND puntos_canjeados > 0`,
+    [empresaId, ids]
+  );
+  return r.rows.map((f) => ({ id: f.id, puntos: Number(f.puntos_canjeados), total: Number(f.total), valorDevuelto: Number(f.valor_devuelto) }));
+}
+
+// Puntos que se usaron en una venta y cuántos ya se devolvieron (los devueltos van como ajuste de origen canje)
+export async function totalesCanje(db, empresaId, ventaId) {
+  exigirEmpresa(empresaId);
+  const r = await db.query(
+    `SELECT COALESCE(-sum(puntos) FILTER (WHERE tipo = 'canje'), 0) AS usados,
+            COALESCE(sum(puntos) FILTER (WHERE tipo = 'ajuste' AND origen = 'canje'), 0) AS devueltos,
+            min(cliente_id::text) AS cliente_id
+     FROM puntos_movimientos WHERE empresa_id = $1 AND venta_id = $2`,
+    [empresaId, ventaId]
+  );
+  const f = r.rows[0];
+  return { usados: Number(f.usados), devueltos: Number(f.devueltos), clienteId: f.cliente_id };
 }

@@ -77,11 +77,13 @@ export async function cargarEntrega(db, empresaId, id) {
   exigirEmpresa(empresaId);
   const e = await db.query(
     `SELECT en.id, en.metodo, en.recoge_nombre, en.motivo, en.articulos, en.creado_en,
-            u.nombre AS entrego, a.nombre AS autorizo, cj.nombre AS caja
+            u.nombre AS entrego, ru.nivel_jerarquico AS entrego_nivel, a.nombre AS autorizo, ra.nivel_jerarquico AS autorizo_nivel, cj.nombre AS caja
      FROM venta_entregas en
      JOIN usuarios u ON u.id = en.usuario_id AND u.empresa_id = en.empresa_id
+     JOIN roles ru ON ru.id = u.rol_id AND ru.empresa_id = u.empresa_id
      JOIN cajas cj ON cj.id = en.caja_id AND cj.empresa_id = en.empresa_id
      LEFT JOIN usuarios a ON a.id = en.autorizado_por AND a.empresa_id = en.empresa_id
+     LEFT JOIN roles ra ON ra.id = a.rol_id AND ra.empresa_id = a.empresa_id
      WHERE en.empresa_id = $1 AND en.id = $2`,
     [empresaId, id]
   );
