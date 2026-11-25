@@ -18,6 +18,8 @@ import TicketEntrega from './TicketEntrega.jsx';
 import ModalCancelar from './ModalCancelar.jsx';
 import ModalReembolso from './ModalReembolso.jsx';
 import ComprobanteAjuste from './ComprobanteAjuste.jsx';
+import ModalCotizar from './ModalCotizar.jsx';
+import ModalAgregarANota from './ModalAgregarANota.jsx';
 import TicketVenta from './TicketVenta.jsx';
 import { notaATicket } from './notaATicket.js';
 import { useDetalleNota } from './useDetalleNota.js';
@@ -47,24 +49,27 @@ export default function DetalleNota({ id, accionInicial, onVolver, onOperando })
   const [cancelando, setCancelando] = useState(false);
   const [reembolsando, setReembolsando] = useState(false);
   const [comprobante, setComprobante] = useState(null);
+  const [cotizando, setCotizando] = useState(null); // servicios que se están cotizando
+  const [agregando, setAgregando] = useState(false);
+  const [avisoAdicion, setAvisoAdicion] = useState('');
   // El id del cobro se reutiliza si hay que reintentar: así nunca se cobra dos veces
   const idCobro = useRef(nuevoUuid());
   const atajoHecho = useRef(false);
 
   // Mientras se cobra, se entrega, se cancela o se reembolsa, la pantalla de Caja no deja cerrar el turno
   useEffect(() => {
-    onOperando?.(cobrando || enviando || entregando || cancelando || reembolsando);
+    onOperando?.(cobrando || enviando || entregando || cancelando || reembolsando || agregando || Boolean(cotizando));
     return () => onOperando?.(false);
-  }, [cobrando, enviando, entregando, cancelando, reembolsando, onOperando]);
+  }, [cobrando, enviando, entregando, cancelando, reembolsando, agregando, cotizando, onOperando]);
 
   // Atajo de la tarjeta: abre directo el cobro, la confirmación de "listo" o la entrega
   useEffect(() => {
     if (!nota || atajoHecho.current) return;
     atajoHecho.current = true;
-    const pendientes = nota.servicios.filter((s) => PENDIENTE.includes(s.estado)).map((s) => s.partidaId);
+    const pendientes = nota.servicios.filter((s) => PENDIENTE.includes(s.estado) && !s.porCotizar).map((s) => s.partidaId);
     if (accionInicial === 'cobrar' && nota.saldo > 0) setCobrando(true);
     if (accionInicial === 'listo' && pendientes.length) setAListo(pendientes);
-    if (accionInicial === 'entregar' && nota.saldo === 0 && nota.servicios.some((s) => s.estado === 'listo')) setEntregando(true);
+    if (accionInicial === 'entregar' && nota.saldo === 0 && !nota.servicios.some((s) => s.porCotizar) && nota.servicios.some((s) => s.estado === 'listo')) setEntregando(true);
   }, [nota, accionInicial]);
 
   if (copia) return <TicketVenta venta={notaATicket(copia)} esCopia onVolver={() => setCopia(null)} />;
@@ -109,8 +114,12 @@ export default function DetalleNota({ id, accionInicial, onVolver, onOperando })
   }
 
   const pendientes = nota.servicios.filter((s) => PENDIENTE.includes(s.estado));
+  const listables = pendientes.filter((s) => !s.porCotizar);
+  const porCotizar = nota.servicios.filter((s) => s.porCotizar);
   const hayListos = nota.servicios.some((s) => s.estado === 'listo');
   const hayHechos = nota.servicios.some((s) => HECHO.includes(s.estado));
+  // Mientras quede algo sin entregar, la nota admite agregados
+  const admiteAgregar = pendientes.length > 0 || hayListos;
   const productosVigentes = nota.productos.filter((p) => !p.devuelto);
   const puedeCancelar = pendientes.length > 0 || productosVigentes.length > 0;
   const hayAjustes = nota.cancelado > 0 || nota.ajustado > 0 || nota.retenido > 0 || nota.reembolsado > 0;
@@ -200,9 +209,20 @@ export default function DetalleNota({ id, accionInicial, onVolver, onOperando })
         <h2 className="text-xl font-semibold tracking-tight">{nota.folio}</h2>
       </div>
 
+      {avisoAdicion && (
+        <div className="mb-4 max-w-xl rounded-2xl bg-emerald-50 text-emerald-800 text-sm px-4 py-3">{avisoAdicion}</div>
+      )}
+
       {errorAccion && !aEspera && (
         <div className="mb-4 max-w-xl">
           <MensajeError error={errorAccion} />
+        </div>
+      )}
+
+      {porCotizar.length > 0 && (
+        <div className="mb-4 max-w-xl rounded-2xl bg-amber-50 text-amber-800 text-sm px-4 py-3">
+          Esta nota tiene {porCotizar.length} {porCotizar.length === 1 ? 'servicio' : 'servicios'} por cotizar. Mientras tanto no se
+          {porCotizar.length === 1 ? ' puede' : ' pueden'} marcar como listo{porCotizar.length === 1 ? '' : 's'} ni se puede entregar la nota.
         </div>
       )}
 
@@ -235,11 +255,18 @@ export default function DetalleNota({ id, accionInicial, onVolver, onOperando })
                                   <p className="text-xs text-neutral-500 mt-0.5">Incluye financiamiento · {dinero(s.cargoFinanciamiento)}</p>
                                 )}
                               </div>
-                              <EtiquetaEstado estado={s.estado} />
+                              <div className="flex flex-col items-end gap-1 shrink-0">
+                                <EtiquetaEstado estado={s.estado} />
+                                {s.porCotizar && (
+                                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full ring-1 bg-amber-50 text-amber-800 ring-amber-200">
+                                    Por cotizar
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             {!cancelado && (
                               <p className="text-xs text-[var(--c-primario)] font-medium mt-2">
-                                Entrega: {formatearFechaLarga(s.fechaPrometida)}
+                                Entrega: {s.porCotizar ? 'por definir' : formatearFechaLarga(s.fechaPrometida)}
                                 {cambioFecha ? ` (antes ${formatearFechaLarga(s.fechaPrometidaOriginal)})` : ''}
                               </p>
                             )}
@@ -247,24 +274,37 @@ export default function DetalleNota({ id, accionInicial, onVolver, onOperando })
                               <p className="text-xs text-neutral-400 mt-0.5">Listo desde {formatearFechaHora(s.listoEn, nota.zonaHoraria)}</p>
                             )}
                             <div className="flex items-center justify-between gap-3 mt-3">
-                              <span className={`font-semibold ${cancelado ? 'line-through' : ''}`}>{dinero(s.total)}</span>
-                              {PENDIENTE.includes(s.estado) && (
-                                <Boton compacto onClick={() => setAListo([s.partidaId])}>
-                                  Marcar listo
-                                </Boton>
-                              )}
-                              {s.estado === 'listo' && nota.puedeGestionar && (
-                                <Boton
-                                  compacto
-                                  variante="secundario"
-                                  onClick={() => {
-                                    setErrorAccion('');
-                                    setAEspera(s.partidaId);
-                                  }}
-                                >
-                                  Regresar a En espera
-                                </Boton>
-                              )}
+                              <span className={`font-semibold ${cancelado ? 'line-through' : ''}`}>{s.porCotizar ? 'Por cotizar' : dinero(s.total)}</span>
+                              <div className="flex flex-wrap justify-end gap-2">
+                                {s.porCotizar && nota.puedeCotizar && (
+                                  <Boton compacto onClick={() => setCotizando([s])}>
+                                    Cotizar
+                                  </Boton>
+                                )}
+                                {s.porCotizar && !nota.puedeCotizar && <span className="text-xs text-amber-700">Falta cotizar</span>}
+                                {!s.porCotizar && s.requiereCotizacion && nota.puedeCotizar && !cancelado && s.estado !== 'entregado' && (
+                                  <Boton compacto variante="secundario" onClick={() => setCotizando([s])}>
+                                    Reajustar
+                                  </Boton>
+                                )}
+                                {!s.porCotizar && PENDIENTE.includes(s.estado) && (
+                                  <Boton compacto onClick={() => setAListo([s.partidaId])}>
+                                    Marcar listo
+                                  </Boton>
+                                )}
+                                {s.estado === 'listo' && nota.puedeGestionar && (
+                                  <Boton
+                                    compacto
+                                    variante="secundario"
+                                    onClick={() => {
+                                      setErrorAccion('');
+                                      setAEspera(s.partidaId);
+                                    }}
+                                  >
+                                    Regresar a En espera
+                                  </Boton>
+                                )}
+                              </div>
                             </div>
                           </div>
                         );
@@ -415,17 +455,38 @@ export default function DetalleNota({ id, accionInicial, onVolver, onOperando })
                   Cobrar saldo
                 </Boton>
               )}
+              {porCotizar.length > 0 && nota.puedeCotizar && (
+                <Boton className="w-full" onClick={() => setCotizando(porCotizar)}>
+                  {porCotizar.length > 1 ? `Cotizar ${porCotizar.length} servicios` : 'Cotizar servicio'}
+                </Boton>
+              )}
               {hayListos && (
                 <>
-                  <Boton className="w-full" disabled={nota.saldo > 0} onClick={() => setEntregando(true)}>
+                  <Boton className="w-full" disabled={nota.saldo > 0 || porCotizar.length > 0} onClick={() => setEntregando(true)}>
                     Entregar
                   </Boton>
-                  {nota.saldo > 0 && <p className="text-xs text-amber-700 text-center">Cobra el saldo antes de entregar.</p>}
+                  {porCotizar.length > 0 ? (
+                    <p className="text-xs text-amber-700 text-center">Cotiza los servicios pendientes antes de entregar.</p>
+                  ) : (
+                    nota.saldo > 0 && <p className="text-xs text-amber-700 text-center">Cobra el saldo antes de entregar.</p>
+                  )}
                 </>
               )}
-              {pendientes.length > 1 && (
-                <Boton variante="secundario" className="w-full" onClick={() => setAListo(pendientes.map((s) => s.partidaId))}>
+              {listables.length > 1 && (
+                <Boton variante="secundario" className="w-full" onClick={() => setAListo(listables.map((s) => s.partidaId))}>
                   Marcar todo como listo
+                </Boton>
+              )}
+              {admiteAgregar && (
+                <Boton
+                  variante="secundario"
+                  className="w-full"
+                  onClick={() => {
+                    setAvisoAdicion('');
+                    setAgregando(true);
+                  }}
+                >
+                  Agregar a la nota
                 </Boton>
               )}
               <Boton variante="secundario" className="w-full" cargando={cargandoCopia} onClick={verCopia}>
@@ -453,6 +514,28 @@ export default function DetalleNota({ id, accionInicial, onVolver, onOperando })
       {entregando && <ModalEntrega nota={nota} onEntregada={entregada} onCerrar={() => setEntregando(false)} />}
       {cancelando && <ModalCancelar nota={nota} onListo={ajusteHecho} onCerrar={() => setCancelando(false)} />}
       {reembolsando && <ModalReembolso nota={nota} onListo={ajusteHecho} onCerrar={() => setReembolsando(false)} />}
+      {agregando && (
+        <ModalAgregarANota
+          nota={nota}
+          onListo={(r) => {
+            setAgregando(false);
+            setAvisoAdicion(`Se agregaron ${dinero(r.adicion.total)} a la nota. Saldo actual: ${dinero(r.saldo)}.`);
+            d.recargar();
+          }}
+          onCerrar={() => setAgregando(false)}
+        />
+      )}
+      {cotizando && (
+        <ModalCotizar
+          nota={nota}
+          servicios={cotizando}
+          onListo={() => {
+            setCotizando(null);
+            d.recargar();
+          }}
+          onCerrar={() => setCotizando(null)}
+        />
+      )}
 
       <ConfirmModal
         abierto={!!aListo}

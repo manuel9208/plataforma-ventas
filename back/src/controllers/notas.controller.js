@@ -25,3 +25,7 @@ export const cambiarEstado = asyncHandler(async (req, res) => {
 export const corregir = asyncHandler(async (req, res) => {
   res.json(await servicio.corregir(req.usuario, req.datos.params.id, req.datos.body, req.ip));
 });
+
+export const cotizar = asyncHandler(async (req, res) => {
+  res.json(await servicio.cotizar(req.usuario, req.datos.params.id, req.datos.body, req.ip));
+});

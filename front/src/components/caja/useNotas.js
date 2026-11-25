@@ -8,6 +8,9 @@ export function useNotas() {
   const [pestana, setPestana] = useState('cobrar');
   const [buscar, setBuscar] = useState('');
   const [consulta, setConsulta] = useState('');
+  const [fecha, setFecha] = useState(''); // AAAA-MM-DD o '' (todas)
+  const [atrasadas, setAtrasadas] = useState(false);
+  const [cotizar, setCotizar] = useState(false);
   const [pagina, setPagina] = useState(1);
   const [version, setVersion] = useState(0);
   const [datos, setDatos] = useState([]);
@@ -28,7 +31,15 @@ export function useNotas() {
     let vivo = true;
     setCargando(true);
     svc
-      .listar({ pestana, buscar: consulta, limite: LIMITE, pagina })
+      .listar({
+        pestana,
+        buscar: consulta,
+        limite: LIMITE,
+        pagina,
+        ...(fecha ? { fecha } : {}),
+        ...(atrasadas ? { atrasadas: 'true' } : {}),
+        ...(cotizar ? { cotizar: 'true' } : {}),
+      })
       .then((r) => {
         if (!vivo) return;
         setDatos((previas) => (pagina === 1 ? r.datos : [...previas, ...r.datos]));
@@ -41,7 +52,7 @@ export function useNotas() {
     return () => {
       vivo = false;
     };
-  }, [pestana, consulta, pagina, version]);
+  }, [pestana, consulta, pagina, version, fecha, atrasadas, cotizar]);
 
   return {
     pestana,
@@ -52,6 +63,25 @@ export function useNotas() {
     buscar,
     setBuscar,
     consulta,
+    fecha,
+    atrasadas,
+    cotizar,
+    // Fecha exacta y "Atrasadas" no se combinan: elegir una quita la otra
+    ponerFecha: (f) => {
+      setFecha(f);
+      setAtrasadas(false);
+      setPagina(1);
+    },
+    ponerAtrasadas: (v) => {
+      setAtrasadas(v);
+      if (v) setFecha('');
+      setPagina(1);
+    },
+    // Se combina con la fecha y con "Atrasadas"
+    ponerCotizar: (v) => {
+      setCotizar(v);
+      setPagina(1);
+    },
     datos,
     total,
     conteos,

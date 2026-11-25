@@ -1,7 +1,7 @@
 const horasADias = (h) => (h === null || h === undefined ? null : Math.round(h / 24));
 
 // Detalle completo (para editar)
-export function servicio(d) {
+export function servicio(d, { verContacto = false } = {}) {
   const preciosSucursal = {};
   for (const r of d.preciosSucursal) {
     (preciosSucursal[r.sucursal_id] ??= {})[r.tipo_articulo_id] = Number(r.precio);
@@ -15,6 +15,8 @@ export function servicio(d) {
     tasaIvaId: d.tasa_iva_id,
     tiempoDias: horasADias(d.tiempo_estimado_horas),
     visiblePublico: d.visible_publico,
+    requiereCotizacion: d.requiere_cotizacion === true,
+    ...(verContacto ? { contactoCotizacion: d.contacto_cotizacion ?? '' } : {}),
     activo: d.activo,
     baja: d.activo ? null : { fecha: d.baja_en, motivo: d.baja_motivo },
     precios: d.precios.map((p) => ({ tipoArticuloId: p.tipo_articulo_id, precio: Number(p.precio) })),
@@ -35,6 +37,7 @@ export function servicioLista(f) {
     departamento: { id: f.departamento_id, nombre: f.departamento_nombre },
     tiempoDias: horasADias(f.tiempo_estimado_horas),
     visiblePublico: f.visible_publico,
+    requiereCotizacion: f.requiere_cotizacion === true,
     activo: f.activo,
     precios: f.precios.map((p) => ({ tipoArticuloId: p.tipoArticuloId, tipo: p.tipo, precio: Number(p.precio) })),
   };

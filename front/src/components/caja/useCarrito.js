@@ -6,6 +6,7 @@ import {
   calcularLineaVenta,
   limiteCanjeDeVenta,
   resolverCanje,
+  resolverCupon,
   siguienteMayoreo,
   totalAhorro,
   totalesVenta,
@@ -24,14 +25,18 @@ const SIN_MANUAL = { lineas: {}, motivo: '', autorizacion: null };
 const SIN_FINANCIAMIENTO = { disponible: false, cargo: 0 };
 const sumaC = (valores) => valores.reduce((s, v) => s + aCentavos(v), 0);
 
-const nuevoServicio = (servicio, precio, s = {}) => ({
-  clave: nuevaClave('v'),
-  servicio,
-  precio,
-  extraIds: s.extraIds ?? [],
-  fechaPrometida: s.fechaPrometida ?? null,
-  fechaMostrada: s.fechaMostrada,
-});
+// Un servicio por cotizar no lleva extras ni fecha: se definen al cotizar la nota
+const nuevoServicio = (servicio, precio, s = {}) => {
+  const cotiza = servicio.requiereCotizacion === true;
+  return {
+    clave: nuevaClave('v'),
+    servicio,
+    precio,
+    extraIds: cotiza ? [] : (s.extraIds ?? []),
+    fechaPrometida: cotiza ? null : (s.fechaPrometida ?? null),
+    fechaMostrada: cotiza ? null : s.fechaMostrada,
+  };
+};
 
 // Productos: un renglón por presentación. Servicios: artículos (unos tenis) con uno o varios servicios cada uno.
 // Los importes salen de las MISMAS funciones que usa el servidor; el servidor vuelve a calcular todo al cobrar.
@@ -51,6 +56,7 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiami
   const [infoCanje, setInfoCanje] = useState(null); // { disponible, saldo, tienePin, ajustes }
   const [canje, setCanje] = useState(null); // { puntos, auth } · auth: { pinCliente } o { autorizacion }
   const [recarga, setRecarga] = useState(0);
+  const [cuponInfo, setCuponInfo] = useState(null); // el cupón que el servidor aceptó para este cliente
 
   useEffect(() => {
     setInfoCanje(null);
@@ -198,7 +204,10 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiami
   };
 
   const ponerCliente = (envio, vista) => {
-    if ((vista?.id ?? null) !== clienteId) setCanje(null);
+    if ((vista?.id ?? null) !== clienteId) {
+      setCanje(null);
+      setCuponInfo(null);
+    }
     setCliente(envio ? { envio, vista } : null);
   };
 
@@ -209,6 +218,7 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiami
     setCliente(null);
     setManual(SIN_MANUAL);
     setCanje(null);
+    setCuponInfo(null);
   };
 
   const calculado = useMemo(() => {
@@ -226,12 +236,12 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiami
 
     // Lista aplanada de servicios, en el mismo orden que el servidor (s0, s1, …)
     const serviciosBase = articulos.flatMap((g) => g.servicios).map((s) => {
-      const principal = calcularLineaVenta({ precioBase: s.precio.precio, mayoreo: [], cantidad: 1, tasa: s.servicio.tasa, incluyeIva });
+      const principal = calcularLineaVenta({ precioBase: s.servicio.requiereCotizacion ? 0 : s.precio.precio, mayoreo: [], cantidad: 1, tasa: s.servicio.tasa, incluyeIva });
       const extras = s.extraIds
         .map((id) => s.servicio.extras.find((x) => x.id === id))
         .filter(Boolean)
         .map((x) => ({ ...x, ...calcularLineaVenta({ precioBase: x.precio, mayoreo: [], cantidad: 1, tasa: x.tasa, incluyeIva }) }));
-      const cargo = financiada && cargoFin > 0 ? calcularLineaVenta({ precioBase: cargoFin, mayoreo: [], cantidad: 1, tasa: s.servicio.tasa, incluyeIva }) : null;
+      const cargo = financiada && cargoFin > 0 && !s.servicio.requiereCotizacion ? calcularLineaVenta({ precioBase: cargoFin, mayoreo: [], cantidad: 1, tasa: s.servicio.tasa, incluyeIva }) : null;
       return { ...s, base: principal, extras, cargo };
     });
 
@@ -263,7 +273,7 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiami
         servicioId: s.servicio.id,
         tipoArticuloId: s.precio.tipoArticuloId,
         departamentoId: s.servicio.departamentoId,
-        precioAplicado: s.precio.precio,
+        precioAplicado: s.servicio.requiereCotizacion ? 0 : s.precio.precio,
         tasa: s.servicio.tasa,
         total: s.base.total,
         calculada: s.base,
@@ -290,8 +300,12 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiami
           })
         : null;
     const conCanje = resolucion?.ok ? resolucion : null;
-    const finalProductos = conCanje?.productos ?? final.productos;
-    const finalServicios = conCanje?.servicios ?? final.servicios;
+
+    // 2c) Cupón: misma función que el servidor. Un solo beneficio por nota (no se junta con puntos)
+    const resolucionCupon = cuponInfo ? resolverCupon({ cupon: cuponInfo, productos: final.productos, servicios: final.servicios, incluyeIva }) : null;
+    const conCupon = resolucionCupon?.ok ? resolucionCupon : null;
+    const finalProductos = conCanje?.productos ?? conCupon?.productos ?? final.productos;
+    const finalServicios = conCanje?.servicios ?? conCupon?.servicios ?? final.servicios;
 
     // 3) Lo que se muestra en cada renglón
     const lineas = base.map((l) => {
@@ -371,14 +385,17 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiami
       limiteCanje,
       canjeActual: conCanje ? { puntos: conCanje.puntos, descuento: conCanje.descuento } : null,
       canjeError: resolucion && !resolucion.ok ? resolucion.error : '',
+      cuponActual: conCupon ? { descuento: conCupon.descuento } : null,
+      cuponError: resolucionCupon && !resolucionCupon.ok ? resolucionCupon.error : '',
     };
-  }, [renglones, articulos, incluyeIva, promociones, manual, financiada, cargoFin, infoCanje, canje]);
+  }, [renglones, articulos, incluyeIva, promociones, manual, financiada, cargoFin, infoCanje, canje, cuponInfo]);
 
   return {
     ...calculado,
     vacio: renglones.length === 0 && articulos.length === 0,
     tieneServicios: articulos.length > 0,
     numServicios,
+    numPorCotizar: articulos.reduce((n, g) => n + g.servicios.filter((s) => s.servicio.requiereCotizacion).length, 0),
     puedeFinanciar,
     financiada,
     cargoFinanciamiento: cargoFin,
@@ -396,9 +413,26 @@ export function useCarrito(incluyeIva, promociones = SIN_PROMOCIONES, financiami
       error: calculado.canjeError,
       // Lo que se manda al servidor al cobrar (solo si el canje es válido)
       envio: calculado.canjeActual && canje ? { puntos: canje.puntos, ...canje.auth } : null,
-      aplicar: (puntos, auth) => setCanje({ puntos, auth }),
+      aplicar: (puntos, auth) => {
+        setCuponInfo(null);
+        setCanje({ puntos, auth });
+      },
       quitar: () => setCanje(null),
       recargar: () => setRecarga((n) => n + 1),
+    },
+    cupon: {
+      info: cuponInfo,
+      actual: calculado.cuponActual,
+      error: calculado.cuponError,
+      // Lo que se manda al servidor al cobrar (solo si el cupón aplica)
+      envio: calculado.cuponActual && cuponInfo ? { codigo: cuponInfo.codigo } : null,
+      aplicar: async (codigo) => {
+        if (!clienteId) throw new Error('Para usar un cupón elige al cliente registrado.');
+        const r = await svc.cupon(codigo, clienteId);
+        setCanje(null);
+        setCuponInfo(r);
+      },
+      quitar: () => setCuponInfo(null),
     },
     porcentajeDe: (clave) => manual.lineas[clave] ?? null,
     agregar,

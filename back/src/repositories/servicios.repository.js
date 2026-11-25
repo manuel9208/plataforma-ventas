@@ -6,6 +6,7 @@ const COLUMNAS = `
   s.id, s.sku, s.nombre, s.descripcion, s.departamento_id,
   d.nombre AS departamento_nombre, d.codigo AS departamento_codigo,
   s.tasa_iva_id, s.tiempo_estimado_horas, s.visible_publico, s.activo,
+  s.requiere_cotizacion, s.contacto_cotizacion,
   s.baja_en, s.baja_motivo, s.creado_en, s.actualizado_en`;
 
 const RESUMEN_PRECIOS = `
@@ -33,6 +34,7 @@ const FROM = `
 const EDITABLES = new Set([
   'nombre', 'descripcion', 'departamento_id', 'tasa_iva_id', 'tiempo_estimado_horas',
   'visible_publico', 'activo', 'baja_en', 'baja_motivo', 'baja_por', 'actualizado_por',
+  'requiere_cotizacion', 'contacto_cotizacion',
 ]);
 
 // ---------- Servicio ----------
@@ -77,12 +79,13 @@ export async function insertar(db, empresaId, d) {
   const r = await db.query(
     `INSERT INTO servicios (
        empresa_id, sku, nombre, descripcion, departamento_id, tasa_iva_id,
-       tiempo_estimado_horas, visible_publico, creado_por, actualizado_por)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+       tiempo_estimado_horas, visible_publico, creado_por, actualizado_por,
+       requiere_cotizacion, contacto_cotizacion)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $10, $11)
      RETURNING id`,
     [
       empresaId, d.sku, d.nombre, d.descripcion, d.departamentoId, d.tasaIvaId,
-      d.tiempoHoras, d.visiblePublico, d.usuarioId,
+      d.tiempoHoras, d.visiblePublico, d.usuarioId, d.requiereCotizacion, d.contactoCotizacion,
     ]
   );
   return r.rows[0].id;

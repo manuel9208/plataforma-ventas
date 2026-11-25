@@ -55,7 +55,7 @@ export default function TicketVenta({ venta, onNueva, esCopia = false, onVolver 
                       <div key={s.partidaId}>
                         <div className="flex justify-between gap-3">
                           <p className="font-medium">{s.nombre}</p>
-                          <span className="font-medium shrink-0">{dinero(s.total)}</span>
+                          <span className="font-medium shrink-0">{s.porCotizar ? 'Por cotizar' : dinero(s.total)}</span>
                         </div>
                         {s.promocion && (
                           <p className="text-xs font-medium text-emerald-700 mt-0.5">

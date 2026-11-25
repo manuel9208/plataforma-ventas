@@ -8,6 +8,7 @@ import Campo from '../shared/Campo.jsx';
 import MensajeError from '../shared/MensajeError.jsx';
 import BuscadorCliente from './BuscadorCliente.jsx';
 import PuntosEnCobro from './PuntosEnCobro.jsx';
+import CuponEnCobro from './CuponEnCobro.jsx';
 
 const FORMAS = [
   { id: 'efectivo', nombre: 'Efectivo' },
@@ -21,10 +22,10 @@ const filaNueva = (forma = 'efectivo', monto = '') => ({ _k: `p${++contador}`, f
 const redondear = (n) => Number(Number(n).toFixed(2));
 
 // total: lo que cuesta todo. totalServicios: la parte que acepta abono. config: abono de la sucursal.
-export default function ModalCobro({ total, totalProductos = 0, totalServicios = 0, financiada = false, config, clienteInicial = null, puntos = null, puedeAutorizar = false, onCliente, enviando, error, onConfirmar, onCerrar }) {
+export default function ModalCobro({ total, totalProductos = 0, totalServicios = 0, tieneServicios = false, financiada = false, config, clienteInicial = null, puntos = null, cupon = null, puedeAutorizar = false, onCliente, enviando, error, onConfirmar, onCerrar }) {
   const { empresa } = useAuth();
   const dinero = (v) => formatearMoneda(v, empresa.moneda);
-  const esNota = totalServicios > 0;
+  const esNota = tieneServicios || totalServicios > 0;
 
   const minimo = esNota
     ? pagoMinimoNota({ totalProductos, totalServicios, porcentaje: config.abonoPorcentaje, esMinimo: config.abonoEsMinimo, financiada })
@@ -310,6 +311,7 @@ export default function ModalCobro({ total, totalProductos = 0, totalServicios =
         </details>
 
         {puntos?.info?.disponible && puntos.info.saldo > 0 && <PuntosEnCobro puntos={puntos} puedeAutorizar={puedeAutorizar} />}
+        {cupon && puntos?.info?.promociones && <CuponEnCobro cupon={cupon} hayPuntos={Boolean(puntos.actual)} />}
 
         {problema && !pagos && (modo !== 'mixto' || falta === 0 || esNota) && <p className="text-sm text-red-600">{problema}</p>}
         <MensajeError error={error} />

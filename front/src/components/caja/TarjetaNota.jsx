@@ -10,6 +10,7 @@ export default function TarjetaNota({ nota, pestana, onAbrir }) {
   const partes = [];
   if (nota.estado === 'cancelada') partes.push('Cancelada');
   if (nota.enEspera) partes.push(`${nota.enEspera} en espera`);
+  if (nota.porCotizar) partes.push(`${nota.porCotizar} por cotizar`);
   if (nota.listos) partes.push(`${nota.listos} ${nota.listos === 1 ? 'listo' : 'listos'}`);
   if (nota.entregados) partes.push(`${nota.entregados} ${nota.entregados === 1 ? 'entregado' : 'entregados'}`);
 
@@ -47,9 +48,15 @@ export default function TarjetaNota({ nota, pestana, onAbrir }) {
       )}
       {pestana === 'espera' && (
         <div className="px-5 pb-5">
-          <Boton compacto className="w-full" onClick={() => onAbrir(nota, 'listo')}>
-            Marcar listo
-          </Boton>
+          {nota.porCotizar >= nota.enEspera ? (
+            <Boton compacto variante="secundario" className="w-full" onClick={() => onAbrir(nota)}>
+              Ver nota (falta cotizar)
+            </Boton>
+          ) : (
+            <Boton compacto className="w-full" onClick={() => onAbrir(nota, 'listo')}>
+              Marcar listo
+            </Boton>
+          )}
         </div>
       )}
       {pestana === 'entregar' && (
@@ -57,6 +64,10 @@ export default function TarjetaNota({ nota, pestana, onAbrir }) {
           {debe ? (
             <Boton compacto variante="secundario" className="w-full" onClick={() => onAbrir(nota, 'cobrar')}>
               Cobrar saldo para entregar
+            </Boton>
+          ) : nota.porCotizar > 0 ? (
+            <Boton compacto variante="secundario" className="w-full" onClick={() => onAbrir(nota)}>
+              Ver nota (falta cotizar)
             </Boton>
           ) : (
             <Boton compacto className="w-full" onClick={() => onAbrir(nota, 'entregar')}>

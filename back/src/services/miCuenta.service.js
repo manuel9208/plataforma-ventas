@@ -80,6 +80,11 @@ export async function compras(cliente) {
   return { datos: filas.map(ser.compra) };
 }
 
+export async function cupones(cliente) {
+  const filas = await repo.listarCupones(pool, cliente.empresaId, cliente.id, LIMITE_LISTAS);
+  return { datos: filas.map(ser.cupon) };
+}
+
 // Cambiar datos o el PIN pide el PIN actual. Los fallos cuentan en el mismo límite que el inicio de sesión.
 async function exigirPin(cliente, pin, ip) {
   const e = cliente.empresaId;

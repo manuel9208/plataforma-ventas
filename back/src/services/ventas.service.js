@@ -33,10 +33,12 @@ import { guardarArticulosDeCliente } from './clienteArticulos.service.js';
 import { otorgarSeguro } from './puntos.service.js';
 import { venta as serializarVenta } from '../serializers/ventas.serializer.js';
 import { autorizarCanje, aplicarCanje, registrarCanje } from './canjePuntos.service.js';
+import { aplicarCupon, registrarUsoCupon, verificarCupon } from './cuponesCaja.service.js';
+import * as cuponesRepo from '../repositories/cupones.repository.js';
 
 const MAX_DIAS_PROMESA = 365;
 // Suma dos importes; si alguno no está desglosado (null), el resultado tampoco
-const sumarImporte = (a, b) => (a == null || b == null ? null : aMonto(aCentavos(a) + aCentavos(b)));
+export const sumarImporte = (a, b) => (a == null || b == null ? null : aMonto(aCentavos(a) + aCentavos(b)));
 const NO_DISPONIBLE_PRODUCTO = 'Uno de los productos ya no está disponible en esta sucursal. Actualiza el catálogo.';
 const NO_DISPONIBLE_SERVICIO = 'Uno de los servicios ya no está disponible en esta sucursal. Actualiza la pantalla.';
 
@@ -49,17 +51,18 @@ async function pieDeRecepcion(db, empresaId, sucursalId) {
 async function cargarVenta(db, empresaId, id) {
   const v = await repo.buscarVenta(db, empresaId, id);
   if (!v) return null;
-  const [partidas, pagos, nota, pie] = await Promise.all([
+  const [partidas, pagos, nota, pie, cupon] = await Promise.all([
     repo.listarPartidas(db, empresaId, id),
     repo.listarPagos(db, empresaId, id),
     notasRepo.cargarNota(db, empresaId, id),
     pieDeRecepcion(db, empresaId, v.sucursal_id),
+    cuponesRepo.usoDeVenta(db, empresaId, id),
   ]);
-  return { ...serializarVenta(v, partidas, pagos, nota), pieRecepcion: pie };
+  return { ...serializarVenta(v, partidas, pagos, nota), pieRecepcion: pie, cupon };
 }
 
 // ---------- Productos: precio de la sucursal, mayoreo e IVA, todo calculado aquí ----------
-async function armarProductos(db, e, sucursalId, solicitadas, incluyeIva) {
+export async function armarProductos(db, e, sucursalId, solicitadas, incluyeIva) {
   if (!solicitadas.length) return [];
 
   // Mismo producto y presentación en dos líneas: se juntan
@@ -108,7 +111,7 @@ async function armarProductos(db, e, sucursalId, solicitadas, incluyeIva) {
 }
 
 // ---------- Servicios: un artículo = un servicio, con sus extras y sus datos ----------
-async function armarServicios(db, e, sucursalId, hoy, solicitados, camposArticulo, incluyeIva) {
+export async function armarServicios(db, e, sucursalId, hoy, solicitados, camposArticulo, incluyeIva) {
   if (!solicitados.length) return [];
 
   const servicioIds = [...new Set(solicitados.map((s) => s.servicioId))];
@@ -137,17 +140,24 @@ async function armarServicios(db, e, sucursalId, hoy, solicitados, camposArticul
     const { datos: articulo, error } = validarArticulo(s.articulo, camposArticulo);
     if (error) throw new ErrorHttp(400, `${p.tipo_nombre}: ${error}`);
 
+    // Servicio que se cotiza con un tercero: precio $0 y fecha "por definir" hasta cotizar la nota
+    const porCotizar = sv.requiere_cotizacion === true;
+    if (porCotizar && s.extraIds.length) throw new ErrorHttp(400, `"${sv.nombre}" se cotiza completo: no lleva extras.`);
+
     // Fecha prometida: la que dice el servicio (en días) a partir de hoy, o la que eligió el cajero
-    const dias = sv.tiempo_estimado_horas == null ? 0 : Math.round(sv.tiempo_estimado_horas / 24);
-    let fechaPrometida = sumarDias(hoy, dias);
-    if (s.fechaPrometida) {
-      if (s.fechaPrometida < hoy) throw new ErrorHttp(400, 'La fecha prometida no puede ser anterior a hoy');
-      if (s.fechaPrometida > sumarDias(hoy, MAX_DIAS_PROMESA)) throw new ErrorHttp(400, 'La fecha prometida está demasiado lejos');
-      fechaPrometida = s.fechaPrometida;
+    let fechaPrometida = null;
+    if (!porCotizar) {
+      const dias = sv.tiempo_estimado_horas == null ? 0 : Math.round(sv.tiempo_estimado_horas / 24);
+      fechaPrometida = sumarDias(hoy, dias);
+      if (s.fechaPrometida) {
+        if (s.fechaPrometida < hoy) throw new ErrorHttp(400, 'La fecha prometida no puede ser anterior a hoy');
+        if (s.fechaPrometida > sumarDias(hoy, MAX_DIAS_PROMESA)) throw new ErrorHttp(400, 'La fecha prometida está demasiado lejos');
+        fechaPrometida = s.fechaPrometida;
+      }
     }
 
-    const general = Number(p.precio_general);
-    const aplicado = Number(p.precio_sucursal ?? p.precio_general);
+    const general = porCotizar ? 0 : Number(p.precio_general);
+    const aplicado = porCotizar ? 0 : Number(p.precio_sucursal ?? p.precio_general);
     const c = calcularLineaVenta({ precioBase: aplicado, mayoreo: [], cantidad: 1, tasa: Number(sv.tasa), incluyeIva });
 
     const extrasLinea = [...new Set(s.extraIds)].map((extraId) => {
@@ -186,6 +196,7 @@ async function armarServicios(db, e, sucursalId, hoy, solicitados, camposArticul
       indiceArticulo: s.indiceArticulo ?? null,
       departamentoId: Number(sv.departamento_id),
       fechaPrometida,
+      porCotizar,
       articulo,
       extras: extrasLinea,
       calculada: c,
@@ -229,6 +240,11 @@ export async function crear(actor, datos, ip) {
 
   // Canje de puntos: lo autoriza el cliente con su PIN o un encargado
   const autorizoCanje = datos.canje ? await autorizarCanje(actor, turno.sucursal_id, datos) : null;
+
+  // Cupón: se revisa el código antes de la transacción (los intentos fallidos se guardan aparte)
+  const cuponVerificado = datos.cupon
+    ? await verificarCupon(actor, { sucursalId: turno.sucursal_id, hoy: hoyEnZona(turno.zona), clienteId: datos.clienteId, codigo: datos.cupon.codigo })
+    : null;
 
   try {
     return await conTransaccion(async (db) => {
@@ -282,13 +298,27 @@ export async function crear(actor, datos, ip) {
             incluyeIva,
           })
         : null;
-      const productos = conCanje?.productos ?? productosPromo;
-      const serviciosConPromo = conCanje?.servicios ?? serviciosPromo;
+      // Cupón: mismo lugar que los puntos, antes del cargo de financiamiento (nunca van juntos)
+      const conCupon = cuponVerificado
+        ? await aplicarCupon(db, {
+            empresaId: e,
+            sucursalId,
+            hoy,
+            clienteId: datos.clienteId,
+            cuponId: cuponVerificado.id,
+            productos: productosPromo,
+            servicios: serviciosPromo,
+            incluyeIva,
+          })
+        : null;
+      const productos = conCanje?.productos ?? conCupon?.productos ?? productosPromo;
+      const serviciosConPromo = conCanje?.servicios ?? conCupon?.servicios ?? serviciosPromo;
 
       // El cargo ya incluye IVA y no recibe promociones ni descuentos: se suma al total de cada servicio (los extras no llevan cargo)
       const servicios =
         financiada && config.financiamientoCargo > 0
           ? serviciosConPromo.map((s) => {
+              if (s.porCotizar) return s; // el cargo se decide al cotizar
               const calculada = calcularLineaVenta({ precioBase: config.financiamientoCargo, mayoreo: [], cantidad: 1, tasa: s.tasa, incluyeIva });
               return {
                 ...s,
@@ -423,6 +453,9 @@ export async function crear(actor, datos, ip) {
       await repo.insertarPagos(db, e, { id: datos.id, turnoId: t.id, cajaId: t.caja_id, usuarioId: actor.id }, pagos);
 
       // Puntos de los productos (los de servicios se ganan al entregar). Si falla, el cobro no se detiene.
+      if (conCupon) {
+        await registrarUsoCupon(db, { empresaId: e, sucursalId, clienteId: datos.clienteId, ventaId: datos.id, usuarioId: actor.id, cupon: conCupon.cupon });
+      }
       if (conCanje) {
         await registrarCanje(db, { empresaId: e, sucursalId, clienteId: datos.clienteId, ventaId: datos.id, usuarioId: actor.id, canje: conCanje.canje });
       }
@@ -452,18 +485,20 @@ export async function crear(actor, datos, ip) {
           total: totales.total,
           productos: productos.length,
           servicios: servicios.length,
+          porCotizar: servicios.filter((s) => s.porCotizar).length,
           articulos: grupos.length,
           pinEmitido: conPin,
           financiada,
           descuentos: aplicadas,
           descuentoManual: datos.descuentos ? { motivo: datos.descuentos.motivo, autorizadoPor: autorizo.id } : null,
           canje: conCanje ? { puntos: conCanje.canje.puntos, descuento: conCanje.canje.descuento, metodo: autorizoCanje.metodo, autorizadoPor: autorizoCanje.autorizoId } : null,
+          cupon: conCupon ? { codigo: conCupon.cupon.codigo, descuento: conCupon.cupon.descuento } : null,
           pagos: pagos.map((p) => ({ forma: p.forma, monto: p.monto })),
         },
         ip,
       });
 
-      return { ...(await cargarVenta(db, e, datos.id)), repetida: false, pinEntrega: conPin ? pin : null, puntos };
+      return { ...(await cargarVenta(db, e, datos.id)), repetida: false, pinEntrega: conPin ? pin : null, puntos, cupon: conCupon ? { codigo: conCupon.cupon.codigo, descuento: conCupon.cupon.descuento } : null };
     });
   } catch (err) {
     // Dos envíos simultáneos con el mismo id: gana uno, el otro recibe la misma venta

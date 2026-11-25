@@ -53,6 +53,7 @@ const FROM = `
            COALESCE(sum(vp.descuento_puntos), 0) AS puntos
     FROM venta_partidas vp WHERE vp.empresa_id = v.empresa_id AND vp.venta_id = v.id
   ) ds ON TRUE
+  LEFT JOIN cupon_usos cu ON cu.empresa_id = v.empresa_id AND cu.venta_id = v.id AND cu.liberado_en IS NULL
   LEFT JOIN LATERAL (
     SELECT COALESCE(sum(ps.cargo_financiamiento), 0) AS financiamiento
     FROM partida_servicio ps
@@ -104,7 +105,8 @@ export async function listar(db, empresaId, sucursales, f, { orden, direccion, l
             c.nombre AS cliente_nombre, c.telefono AS cliente_telefono,
             ${VALOR_SQL} AS valor, ${PAGADO_SQL} AS abonado, ${SALDO_SQL} AS saldo,
             (pg.efectivo - rb.efectivo) AS efectivo, (pg.tarjeta - rb.tarjeta) AS tarjeta, (pg.transferencia - rb.transferencia) AS transferencia,
-            ds.promo AS descuento_promocion, ds.manual AS descuento_manual, ds.puntos AS puntos_usados, fi.financiamiento,
+            ds.promo AS descuento_promocion, ds.manual AS descuento_manual, ds.puntos AS puntos_usados,
+            COALESCE(cu.descuento, 0) AS descuento_cupon, fi.financiamiento,
             sv.articulos, sv.en_espera, sv.listos, sv.entregados, sv.cancelados,
             to_char(sv.prometida, 'YYYY-MM-DD') AS prometida
      ${FROM} ${where}
@@ -130,6 +132,7 @@ export async function totalesPorSucursal(db, empresaId, sucursales, f) {
             COALESCE(sum(v.iva), 0) AS iva,
             COALESCE(sum(ds.promo), 0) AS descuento_promocion,
             COALESCE(sum(ds.manual), 0) AS descuento_manual,
+            COALESCE(sum(cu.descuento), 0) AS descuento_cupon,
             COALESCE(sum(ds.puntos), 0) AS puntos_usados,
             COALESCE(sum(fi.financiamiento), 0) AS financiamiento,
             count(*) FILTER (WHERE ${CANCELADA}) AS canceladas

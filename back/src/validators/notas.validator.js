@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { FORMAS_PAGO, PESTANAS_NOTAS, esFechaISO } from '@plataforma/calculos';
 import { nombrePropio } from '../utils/texto.js';
-import { telefono } from './comunes.validator.js';
+import { maxDecimales, telefono } from './comunes.validator.js';
 
 const idNumero = z.number().int().positive();
 const textoArticulo = z.string().trim().max(300).optional();
@@ -9,12 +9,25 @@ const dinero = z.number().min(0).max(9999999.99);
 
 export const idParams = z.object({ id: z.string().uuid('Nota inválida') });
 
-export const listaQuery = z.object({
-  pestana: z.enum(PESTANAS_NOTAS).default('cobrar'),
-  buscar: z.string().trim().max(60).optional(),
-  limite: z.coerce.number().int().min(1).max(50).default(15),
-  pagina: z.coerce.number().int().min(1).default(1),
-});
+export const listaQuery = z
+  .object({
+    pestana: z.enum(PESTANAS_NOTAS).default('cobrar'),
+    buscar: z.string().trim().max(60).optional(),
+    fecha: z.string().refine(esFechaISO, 'Fecha inválida').optional(),
+    atrasadas: z
+      .enum(['true', 'false'])
+      .optional()
+      .transform((v) => v === 'true'),
+    cotizar: z
+      .enum(['true', 'false'])
+      .optional()
+      .transform((v) => v === 'true'),
+    limite: z.coerce.number().int().min(1).max(50).default(15),
+    pagina: z.coerce.number().int().min(1).default(1),
+  })
+  .refine((q) => !(q.fecha && q.atrasadas), {
+    message: 'Elige una fecha exacta o atrasadas, no ambas',
+  });
 
 const pago = z
   .object({
@@ -71,3 +84,22 @@ export const correccionBody = z
   })
   .strict()
   .refine((d) => d.cliente || (d.articulos && d.articulos.length), { message: 'No hay cambios que guardar' });
+
+  // Precio final y fecha definitiva de los servicios "por cotizar" (el servidor recalcula IVA y totales)
+export const cotizacionBody = z
+  .object({
+    servicios: z
+      .array(
+        z
+          .object({
+            partidaId: z.string().uuid(),
+            precio: z.number().positive('El precio debe ser mayor a cero').max(99999.99).refine(maxDecimales(2), 'Máximo 2 decimales'),
+            fechaPrometida: z.string().refine(esFechaISO, 'Fecha inválida'),
+          })
+          .strict()
+      )
+      .min(1, 'Elige qué servicios se cotizan')
+      .max(50),
+  })
+  .strict()
+  .refine((d) => new Set(d.servicios.map((s) => s.partidaId)).size === d.servicios.length, { message: 'Hay servicios repetidos' });

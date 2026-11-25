@@ -11,6 +11,7 @@ router.post('/login', validar({ body: loginBody }), ctrl.login);
 router.get('/yo', autenticarCliente, ctrl.yo);
 router.get('/pedidos', autenticarCliente, ctrl.pedidos);
 router.get('/compras', autenticarCliente, ctrl.compras);
+router.get('/cupones', autenticarCliente, ctrl.cupones);
 router.get('/puntos', autenticarCliente, ctrl.puntos);
 router.patch('/datos', autenticarCliente, validar({ body: datosBody }), ctrl.actualizarDatos);
 router.post('/pin', autenticarCliente, validar({ body: cambiarPinBody }), ctrl.cambiarPin);

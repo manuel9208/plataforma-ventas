@@ -52,3 +52,20 @@ export const compra = (f) => ({
   // Lo que vale ahora (descontando lo cancelado o devuelto)
   total: resumenNota({ total: n(f.total), cancelado: n(f.cancelado), ajustado: n(f.ajustado), retenido: n(f.retenido) }).total,
 });
+
+export const cupon = (f) => {
+  const usos = n(f.usos);
+  const veces = n(f.veces_por_cliente);
+  return {
+    nombre: f.nombre,
+    codigo: f.codigo,
+    modo: f.modo, // 'porcentaje' | 'monto'
+    valor: n(f.valor),
+    desde: f.desde,
+    hasta: f.hasta,
+    sucursales: f.sucursales ?? [], // vacío = todas
+    usos,
+    restantes: Math.max(veces - usos, 0),
+    estado: usos >= veces ? 'agotado' : f.desde && f.desde > f.hoy ? 'programado' : 'disponible',
+  };
+};

@@ -79,6 +79,11 @@ export async function entregar(actor, ventaId, datos, ip) {
   );
   if (aviso) throw new ErrorHttp(409, aviso);
 
+  // Con servicios por cotizar el total todavía no es el final: no se entrega
+  if ((await listaRepo.pendientesDeCotizar(pool, e, ventaId)) > 0) {
+    throw new ErrorHttp(409, 'Esta nota tiene servicios por cotizar. Cotízalos antes de entregar.');
+  }
+
   const config = await configRepo.cargarConfig(pool, e, nota.sucursal_id);
   let metodo;
   let autorizo = null;

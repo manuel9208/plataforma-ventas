@@ -14,6 +14,8 @@ const comunes = {
   descripcion: texto(500).nullable().optional(),
   tiempoDias: z.number().int().min(0, 'No puede ser negativo').max(365).nullable().optional(),
   visiblePublico: z.boolean().optional(),
+  requiereCotizacion: z.boolean().optional(),
+  contactoCotizacion: texto(300).nullable().optional(),
 };
 
 export const idParams = z.object({ id: z.coerce.number().int().positive() });

@@ -3,7 +3,9 @@ import { formatearFechaLarga } from '../../utils/formato.js';
 const textoDe = (m, verMotivo) => {
   if (m.tipo === 'ganado') return m.origen === 'entrega' ? 'Puntos por servicio entregado' : 'Puntos por compra';
   if (m.tipo === 'reversa') return 'Se restaron por una devolución';
-  if (m.tipo === 'canje') return 'Canje de puntos';
+  if (m.tipo === 'canje') return 'Usaste puntos en una compra';
+  // Los puntos que vuelven por cancelar o devolver algo pagado con puntos
+  if (m.tipo === 'ajuste' && m.origen === 'canje') return 'Te devolvimos puntos';
   return verMotivo && m.motivo ? `Ajuste de la tienda: ${m.motivo}` : 'Ajuste de la tienda';
 };
 

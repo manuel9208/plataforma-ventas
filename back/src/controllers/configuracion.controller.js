@@ -12,3 +12,7 @@ export const guardar = asyncHandler(async (req, res) => {
 export const guardarSucursal = asyncHandler(async (req, res) => {
   res.json(await servicio.guardarSucursal(req.usuario, req.datos.params.id, req.datos.body, req.ip));
 });
+
+export const cupones = asyncHandler(async (req, res) => {
+  res.json(await servicio.cupones(req.cliente));
+});

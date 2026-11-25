@@ -97,3 +97,27 @@ export async function listarCompras(db, empresaId, clienteId, limite) {
   );
   return r.rows;
 }
+
+// Cupones personales del cliente (los generales no se listan: su código es público)
+export async function listarCupones(db, empresaId, clienteId, limite) {
+  exigirEmpresa(empresaId);
+  const r = await db.query(
+    `SELECT c.id, c.nombre, c.codigo, c.modo, c.valor, c.veces_por_cliente,
+            to_char(c.desde, 'YYYY-MM-DD') AS desde, to_char(c.hasta, 'YYYY-MM-DD') AS hasta,
+            to_char((now() AT TIME ZONE e.zona_horaria)::date, 'YYYY-MM-DD') AS hoy,
+            (SELECT count(*) FROM cupon_usos u
+             WHERE u.empresa_id = c.empresa_id AND u.cupon_id = c.id AND u.cliente_id = $2::uuid AND u.liberado_en IS NULL) AS usos,
+            (SELECT COALESCE(array_agg(s.nombre ORDER BY s.nombre), '{}'::text[])
+             FROM cupon_sucursales cs
+             JOIN sucursales s ON s.id = cs.sucursal_id AND s.empresa_id = cs.empresa_id
+             WHERE cs.empresa_id = c.empresa_id AND cs.cupon_id = c.id) AS sucursales
+     FROM cupones c
+     JOIN empresas e ON e.id = c.empresa_id
+     WHERE c.empresa_id = $1 AND c.cliente_id = $2::uuid AND c.activo AND c.encendido
+       AND (c.hasta IS NULL OR c.hasta >= (now() AT TIME ZONE e.zona_horaria)::date)
+     ORDER BY c.hasta NULLS LAST, c.creado_en DESC, c.id
+     LIMIT $3`,
+    [empresaId, clienteId, limite]
+  );
+  return r.rows;
+}

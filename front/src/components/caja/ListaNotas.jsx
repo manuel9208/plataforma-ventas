@@ -1,4 +1,6 @@
+import { sumarDias } from '@plataforma/calculos';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { hoyISO } from '../../utils/formato.js';
 import { tienePermiso } from '../../utils/permisos.js';
 import Boton from '../shared/Boton.jsx';
 import Icono from '../shared/Icono.jsx';
@@ -23,6 +25,12 @@ const VACIO = {
   entregadas: 'Aún no hay notas entregadas.',
   canceladas: 'No hay notas canceladas.',
 };
+const PESTANAS_CON_FECHA = ['cobrar', 'espera', 'entregar'];
+
+const chip = (activo) =>
+  `min-h-9 px-3.5 rounded-xl text-xs font-semibold transition ${
+    activo ? 'bg-[var(--c-primario)] text-white' : 'bg-white border border-[var(--c-borde)] text-neutral-600 hover:border-[var(--c-acento)]'
+  }`;
 
 export default function ListaNotas({ lista, onAbrir }) {
   const { usuario } = useAuth();
@@ -32,6 +40,11 @@ export default function ListaNotas({ lista, onAbrir }) {
     nombre,
     contador: lista.conteos[id],
   }));
+
+  const hoy = hoyISO();
+  const manana = sumarDias(hoy, 1);
+  const admiteFecha = PESTANAS_CON_FECHA.includes(lista.pestana);
+  const esTodas = !lista.fecha && !lista.atrasadas;
 
   return (
     <section>
@@ -47,7 +60,42 @@ export default function ListaNotas({ lista, onAbrir }) {
         />
       </div>
 
-      <Segmentos className="mb-5" opciones={opciones} valor={lista.pestana} onCambio={lista.cambiarPestana} />
+      <Segmentos className="mb-4" opciones={opciones} valor={lista.pestana} onCambio={lista.cambiarPestana} />
+
+      {admiteFecha && (
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => lista.ponerFecha('')} className={chip(esTodas)}>
+            Todas
+          </button>
+          <button type="button" onClick={() => lista.ponerFecha(hoy)} className={chip(lista.fecha === hoy && !lista.atrasadas)}>
+            Hoy
+          </button>
+          <button type="button" onClick={() => lista.ponerFecha(manana)} className={chip(lista.fecha === manana && !lista.atrasadas)}>
+            Mañana
+          </button>
+          <input
+            type="date"
+            aria-label="Filtrar por fecha de entrega"
+            value={lista.fecha}
+            onChange={(e) => lista.ponerFecha(e.target.value)}
+            className="min-h-9 px-3 rounded-xl bg-white border border-[var(--c-borde)] text-xs text-neutral-700 outline-none focus:border-[var(--c-acento)]"
+          />
+          <button
+            type="button"
+            onClick={() => lista.ponerAtrasadas(!lista.atrasadas)}
+            className={`min-h-9 px-3.5 rounded-xl text-xs font-semibold transition ${
+              lista.atrasadas
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'bg-amber-50/80 border border-amber-200 text-amber-800 hover:bg-amber-100'
+            }`}
+          >
+            Atrasadas
+          </button>
+          <button type="button" onClick={() => lista.ponerCotizar(!lista.cotizar)} className={chip(lista.cotizar)}>
+            Por cotizar
+          </button>
+        </div>
+      )}
 
       {lista.error && (
         <div className="mb-4 max-w-xl">

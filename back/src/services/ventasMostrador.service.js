@@ -9,6 +9,7 @@ import * as listaRepo from '../repositories/notasLista.repository.js';
 import * as ventasRepo from '../repositories/ventas.repository.js';
 import * as turnosRepo from '../repositories/turnos.repository.js';
 import { autorizar } from './autorizacion.service.js';
+import { liberarCuponSiCancelada } from './cuponesCaja.service.js';
 import { devolverCanjePorDevolucion, revertirSeguro } from './puntos.service.js';
 import { ventaLista, ventaDetalle, comprobanteDevolucion } from '../serializers/ventasMostrador.serializer.js';
 
@@ -199,6 +200,8 @@ export async function devolver(actor, ventaId, datos, ip) {
       });
     }
     await ajustesRepo.sumarAjustes(db, e, ventaId, { cancelado: plan.cancelado, ajustado: 0, retenido: 0, reembolsado: plan.devuelto });
+    // Si se devolvió todo, el cupón que usó se libera
+    await liberarCuponSiCancelada(db, { empresaId: e, sucursalId: t.sucursal_id, ventaId, usuarioId: actor.id });
 
     // Lo devuelto deja de dar puntos
     await revertirSeguro(db, { empresaId: e, sucursalId: t.sucursal_id, ventaId, origen: 'venta', baseDevuelta: plan.cancelado, clave: `reversa:${datos.id}`, usuarioId: actor.id });

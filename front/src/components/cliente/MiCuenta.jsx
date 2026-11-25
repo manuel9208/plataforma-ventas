@@ -5,6 +5,7 @@ import { useCliente } from '../../context/ClienteContext.jsx';
 import ModalAvisoPrivacidad from './ModalAvisoPrivacidad.jsx';
 import SeccionPedidos from './SeccionPedidos.jsx';
 import SeccionCompras from './SeccionCompras.jsx';
+import SeccionCupones from './SeccionCupones.jsx';
 import SeccionPuntos from './SeccionPuntos.jsx';
 import SeccionDatos from './SeccionDatos.jsx';
 import SeccionPin from './SeccionPin.jsx';
@@ -16,6 +17,7 @@ const SECCIONES = [
   { id: 'pedidos', nombre: 'Mis pedidos', componente: SeccionPedidos },
   { id: 'compras', nombre: 'Mis compras', componente: SeccionCompras },
   { id: 'puntos', nombre: 'Mis puntos', componente: SeccionPuntos },
+  { id: 'cupones', nombre: 'Mis cupones', componente: SeccionCupones },
   { id: 'datos', nombre: 'Mis datos', componente: SeccionDatos },
   { id: 'pin', nombre: 'Mi PIN', componente: SeccionPin },
 ];

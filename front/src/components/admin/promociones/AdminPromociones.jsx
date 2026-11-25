@@ -2,9 +2,13 @@ import { useState } from 'react';
 import EncabezadoApp from '../../shared/EncabezadoApp.jsx';
 import Segmentos from '../../shared/Segmentos.jsx';
 import SeccionPromociones from './SeccionPromociones.jsx';
+import SeccionCupones from './SeccionCupones.jsx';
 
-// Para agregar una sección (puntos, sellos...): un archivo y una línea aquí
-const SECCIONES = [{ id: 'promociones', nombre: 'Promociones', componente: SeccionPromociones }];
+// Para agregar una sección (sellos, ruleta...): un archivo y una línea aquí
+const SECCIONES = [
+  { id: 'promociones', nombre: 'Promociones', componente: SeccionPromociones },
+  { id: 'cupones', nombre: 'Cupones', componente: SeccionCupones },
+];
 
 export default function AdminPromociones() {
   const [activa, setActiva] = useState(SECCIONES[0].id);

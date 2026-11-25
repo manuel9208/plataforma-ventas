@@ -12,6 +12,19 @@ import * as catalogoSer from '../serializers/catalogo.serializer.js';
 
 const quien = (actor) => ({ usuarioId: actor.id, adminGlobalId: actor.adminGlobalId });
 
+// El contacto del taller externo solo lo ven el adminglobal, el administrador (1) y el gerente (2)
+const NIVEL_VER_CONTACTO = 2;
+const puedeVerContacto = (actor) => actor.esGlobal === true || (actor.nivel != null && actor.nivel <= NIVEL_VER_CONTACTO);
+
+function exigirContacto(actor, n) {
+  if (n.contactoCotizacion !== undefined && !puedeVerContacto(actor)) {
+    throw new ErrorHttp(403, 'No tienes permiso para el contacto de cotización');
+  }
+}
+
+// Un servicio que se cotiza lleva precio $0: el precio real se pone al cotizar la nota
+const paraCotizar = (n) => ({ ...n, precios: n.precios.map((p) => ({ ...p, precio: 0 })), preciosSucursal: {} });
+
 // Quita repetidos y completa lo que no vino
 function normalizar(datos) {
   return {
@@ -164,6 +177,7 @@ export async function obtenerOpciones(actor) {
     tiposArticulo: tipos.filas.map(catalogoSer.tipoArticulo),
     extras: extras.map((x) => ({ id: x.id, nombre: x.nombre, precio: Number(x.precio) })),
     sucursales,
+    puedeVerContacto: puedeVerContacto(actor),
   };
 }
 
@@ -175,12 +189,14 @@ export async function listar(actor, consulta) {
 export async function obtener(actor, id) {
   const d = await cargarDetalle(pool, actor, id);
   if (!d) throw new ErrorHttp(404, 'Servicio no encontrado');
-  return ser.servicio(d);
+  return ser.servicio(d, { verContacto: puedeVerContacto(actor) });
 }
 
 export async function crear(actor, datos, ip) {
-  const n = normalizar(datos);
-  validarPayload(actor, n);
+  const base = normalizar(datos);
+  validarPayload(actor, base);
+  exigirContacto(actor, base);
+  const n = base.requiereCotizacion ? paraCotizar(base) : base;
 
   const detalle = await conTransaccion(async (db) => {
     await validarReferencias(db, actor, {
@@ -203,14 +219,16 @@ export async function crear(actor, datos, ip) {
       tiempoHoras: n.tiempoDias == null ? null : n.tiempoDias * 24,
       visiblePublico: n.visiblePublico ?? true,
       usuarioId: actor.id,
+      requiereCotizacion: n.requiereCotizacion === true,
+      contactoCotizacion: n.requiereCotizacion ? (n.contactoCotizacion ?? null) : null,
     });
     await sincronizar(db, actor, id, n);
 
     const d = await cargarDetalle(db, actor, id);
-    await bitacora(db, actor, 'servicio.crear', id, n.sucursalIds[0], null, ser.servicio(d), ip);
+    await bitacora(db, actor, 'servicio.crear', id, n.sucursalIds[0], null, ser.servicio(d, { verContacto: true }), ip);
     return d;
   });
-  return ser.servicio(detalle);
+  return ser.servicio(detalle, { verContacto: puedeVerContacto(actor) });
 }
 
 export async function actualizar(actor, id, datos, ip) {
@@ -219,18 +237,30 @@ export async function actualizar(actor, id, datos, ip) {
   if (bloque !== (datos.sucursalIds !== undefined)) {
     throw new ErrorHttp(400, 'Los precios y las sucursales se envían juntos');
   }
-  const n = normalizar(datos);
+  let n = normalizar(datos);
   if (bloque) validarPayload(actor, n);
+  exigirContacto(actor, n);
 
   const despues = await conTransaccion(async (db) => {
     const antes = await cargarDetalle(db, actor, id);
     if (!antes) throw new ErrorHttp(404, 'Servicio no encontrado');
+
+    const cambiaCotizacion = n.requiereCotizacion !== undefined && n.requiereCotizacion !== antes.requiere_cotizacion;
+    if (cambiaCotizacion && !bloque) {
+      throw new ErrorHttp(400, 'El cambio de "requiere cotización" se guarda junto con los precios y las sucursales');
+    }
+    const requiere = n.requiereCotizacion ?? antes.requiere_cotizacion;
+    if (requiere && bloque) n = paraCotizar(n);
 
     const campos = {};
     if (n.nombre !== undefined) campos.nombre = n.nombre;
     if (n.descripcion !== undefined) campos.descripcion = n.descripcion;
     if (n.visiblePublico !== undefined) campos.visible_publico = n.visiblePublico;
     if (n.tiempoDias !== undefined) campos.tiempo_estimado_horas = n.tiempoDias === null ? null : n.tiempoDias * 24;
+    if (n.requiereCotizacion !== undefined) campos.requiere_cotizacion = n.requiereCotizacion;
+    if (n.contactoCotizacion !== undefined || n.requiereCotizacion === false) {
+      campos.contacto_cotizacion = requiere ? (n.contactoCotizacion ?? null) : null;
+    }
 
     const cambiaDepto = n.departamentoId !== undefined && n.departamentoId !== antes.departamento_id;
     const cambiaTasa = n.tasaIvaId !== undefined && n.tasaIvaId !== antes.tasa_iva_id;
@@ -261,8 +291,11 @@ export async function actualizar(actor, id, datos, ip) {
     let accion = 'servicio.editar';
     if (n.activo === false && antes.activo) accion = 'servicio.desactivar';
     if (reactiva) accion = 'servicio.reactivar';
-    await bitacora(db, actor, accion, id, d.sucursales[0]?.sucursal_id ?? null, ser.servicio(antes), ser.servicio(d), ip);
+    await bitacora(
+      db, actor, accion, id, d.sucursales[0]?.sucursal_id ?? null,
+      ser.servicio(antes, { verContacto: true }), ser.servicio(d, { verContacto: true }), ip
+    );
     return d;
   });
-  return ser.servicio(despues);
+  return ser.servicio(despues, { verContacto: puedeVerContacto(actor) });
 }

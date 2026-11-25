@@ -32,7 +32,11 @@ const Seccion = ({ titulo, children }) => (
 export default function FormularioServicio({ servicio, opciones, onGuardar, onCerrar }) {
   const { empresa } = useAuth();
   const editando = !!servicio;
-  const [f, setF] = useState(() => estadoInicial(servicio, opciones));
+  const [f, setF] = useState(() => ({
+    ...estadoInicial(servicio, opciones),
+    requiereCotizacion: servicio?.requiereCotizacion ?? false,
+    contactoCotizacion: servicio?.contactoCotizacion ?? '',
+  }));
   const [error, setError] = useState('');
   const [detalles, setDetalles] = useState([]);
   const [guardando, setGuardando] = useState(false);
@@ -69,7 +73,12 @@ export default function FormularioServicio({ servicio, opciones, onGuardar, onCe
     }
     setGuardando(true);
     try {
-      await onGuardar(armarDatos(f, { editando, tipos }));
+      await onGuardar({
+        ...armarDatos(f, { editando, tipos }),
+        requiereCotizacion: f.requiereCotizacion,
+        // El contacto solo se manda si esta persona puede verlo
+        ...(opciones.puedeVerContacto ? { contactoCotizacion: f.requiereCotizacion ? f.contactoCotizacion.trim() || null : null } : {}),
+      });
       onCerrar();
     } catch (err) {
       setError(err.message);
@@ -113,9 +122,29 @@ export default function FormularioServicio({ servicio, opciones, onGuardar, onCe
           </Selector>
         </Seccion>
 
+        <Seccion titulo="¿Se cotiza con un tercero?">
+          <Interruptor
+            etiqueta="Requiere cotización"
+            descripcion="Se recibe sin precio ni fecha de entrega. Un taller externo lo revisa y después se le da el precio al cliente. La revisión no se cobra."
+            valor={f.requiereCotizacion}
+            onCambiar={(v) => set('requiereCotizacion', v)}
+          />
+          {f.requiereCotizacion && opciones.puedeVerContacto && (
+            <Campo
+              etiqueta="¿Con quién se cotiza? (opcional)"
+              value={f.contactoCotizacion}
+              onChange={(e) => set('contactoCotizacion', e.target.value)}
+              maxLength={300}
+              ayuda="Nombre, teléfono o dirección del taller. Solo lo ve el personal autorizado, nunca el cliente."
+            />
+          )}
+        </Seccion>
+
         <Seccion titulo="¿Cuánto cuesta?">
           <p className="text-sm text-neutral-500 -mt-2">
-            Pon el precio de cada tipo de artículo. Deja vacío el que no aceptas.
+            {f.requiereCotizacion
+              ? 'Escribe 0 en los tipos de artículo que aceptas. El precio real se pone al cotizar la nota.'
+              : 'Pon el precio de cada tipo de artículo. Deja vacío el que no aceptas.'}
           </p>
           <div className="grid sm:grid-cols-2 gap-3">
             {tipos.map((t) => (

@@ -69,7 +69,7 @@ export async function listarServicios(db, empresaId, sucursalId, { buscar, ids, 
 
   params.push(limite, (pagina - 1) * limite);
   const filas = await db.query(
-    `SELECT s.id, s.departamento_id, s.sku, s.nombre, s.descripcion, s.tiempo_estimado_horas, d.nombre AS departamento,
+    `SELECT s.id, s.departamento_id, s.sku, s.nombre, s.descripcion, s.tiempo_estimado_horas, s.requiere_cotizacion, d.nombre AS departamento,
             (SELECT t.porcentaje FROM tasas_iva t WHERE t.id = s.tasa_iva_id AND t.empresa_id = s.empresa_id) AS tasa,
             (SELECT COALESCE(json_agg(json_build_object(
                       'tipoArticuloId', ta.id, 'tipo', ta.nombre, 'precio', COALESCE(sps.precio, sp.precio))
@@ -100,7 +100,7 @@ export async function listarServicios(db, empresaId, sucursalId, { buscar, ids, 
 export async function cargarServicios(db, empresaId, sucursalId, ids) {
   exigirEmpresa(empresaId);
   const r = await db.query(
-    `SELECT s.id, s.departamento_id, s.sku, s.nombre, s.activo, s.tiempo_estimado_horas, d.activo AS departamento_activo,
+    `SELECT s.id, s.departamento_id, s.sku, s.nombre, s.activo, s.tiempo_estimado_horas, s.requiere_cotizacion, d.activo AS departamento_activo,
             (SELECT t.porcentaje FROM tasas_iva t WHERE t.id = s.tasa_iva_id AND t.empresa_id = s.empresa_id) AS tasa,
             EXISTS (SELECT 1 FROM servicio_sucursal ss
                     WHERE ss.empresa_id = s.empresa_id AND ss.servicio_id = s.id AND ss.sucursal_id = $2 AND ss.activo) AS en_sucursal
@@ -198,9 +198,9 @@ export async function insertarServicio(db, empresaId, s) {
   await db.query(
     `INSERT INTO partida_servicio
        (partida_id, empresa_id, servicio_id, tipo_articulo_id, tipo_articulo_nombre,
-        fecha_prometida, fecha_prometida_original, recibido_por, sucursal_entrega_id, venta_articulo_id, cargo_financiamiento)
-     VALUES ($1, $2, $3, $4, $5, $6::date, $6::date, $7, $8, $9, $10)`,
-    [id, empresaId, s.servicioId, s.tipoArticuloId, s.tipoNombre, s.fechaPrometida, s.usuarioId, s.sucursalId, s.articuloId ?? null, s.cargoFinanciamiento ?? 0]
+        fecha_prometida, fecha_prometida_original, recibido_por, sucursal_entrega_id, venta_articulo_id, cargo_financiamiento, por_cotizar)
+     VALUES ($1, $2, $3, $4, $5, $6::date, $6::date, $7, $8, $9, $10, $11)`,
+    [id, empresaId, s.servicioId, s.tipoArticuloId, s.tipoNombre, s.fechaPrometida ?? null, s.usuarioId, s.sucursalId, s.articuloId ?? null, s.cargoFinanciamiento ?? 0, s.porCotizar === true]
   );
 
   const a = s.articulo;
@@ -250,7 +250,7 @@ export async function cargarNota(db, empresaId, ventaId) {
 
   const s = await db.query(
     `SELECT vp.id, vp.orden, vp.tipo, vp.nombre, vp.total, vp.promocion_nombre, vp.descuento,
-            ps.estado_trabajo, ps.fecha_prometida, ps.fecha_prometida_original, ps.tipo_articulo_nombre, ps.venta_articulo_id,
+            ps.estado_trabajo, ps.fecha_prometida, ps.fecha_prometida_original, ps.por_cotizar, ps.cotizado_en, ps.tipo_articulo_nombre, ps.venta_articulo_id,
             va.comentario, ps.cargo_financiamiento,
             pa.marca, pa.talla, pa.color, pa.modelo, pa.textura, pa.descripcion,
             pe.padre_partida_id

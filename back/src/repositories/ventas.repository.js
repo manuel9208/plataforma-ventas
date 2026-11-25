@@ -172,7 +172,7 @@ export async function insertarVenta(db, empresaId, v) {
   return r.rowCount > 0;
 }
 
-export async function insertarPartidas(db, empresaId, ventaId, usuarioId, partidas) {
+export async function insertarPartidas(db, empresaId, ventaId, usuarioId, partidas, { ordenInicial = 0 } = {}) {
   exigirEmpresa(empresaId);
   for (const [i, p] of partidas.entries()) {
     await db.query(
@@ -184,7 +184,7 @@ export async function insertarPartidas(db, empresaId, ventaId, usuarioId, partid
        VALUES ($1, $2, $3, 'producto', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, now(), $19,
                $20, $21, $22, $23, $24, $25, $26, $27)`,
       [
-        empresaId, ventaId, i + 1, p.productoId, p.presentacionId, p.nombre, p.sku, p.unidad, p.factor,
+        empresaId, ventaId, ordenInicial + i + 1, p.productoId, p.presentacionId, p.nombre, p.sku, p.unidad, p.factor,
         p.cantidad, p.cantidadBase, p.precioLista, p.precioAplicado, p.origenPrecio, p.tasa, p.base, p.iva, p.total,
         usuarioId,
         p.promocionId ?? null, p.promocionNombre ?? null, p.descuento ?? 0, p.descuentoOrigen ?? null,

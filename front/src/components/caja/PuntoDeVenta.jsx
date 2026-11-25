@@ -124,6 +124,7 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
         ...(carrito.descuentoManual ? { descuentos: carrito.descuentoManual } : {}),
         ...(carrito.financiada ? { financiada: true } : {}),
         ...(carrito.puntos.envio ? { canje: carrito.puntos.envio } : {}),
+        ...(carrito.cupon.envio ? { cupon: carrito.cupon.envio } : {}),
         ...(cliente ?? {}),
       });
       setTicket(venta);
@@ -141,6 +142,9 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
         carrito.limpiarAutorizacion();
         setCobrando(false);
         setAviso(e.message);
+      } else if (carrito.cupon.envio && /cup[oó]n|c[oó]digo|promociones|intentos/i.test(e.message)) {
+        carrito.cupon.quitar();
+        setErrorCobro(e.message);
       } else if (carrito.puntos.envio && /punto|pin|encargado|autoriz|promociones|intentos/i.test(e.message)) {
         // El canje no pasó: se quita y el cajero lo vuelve a pedir con los datos al día
         carrito.puntos.quitar();
@@ -289,10 +293,12 @@ export default function PuntoDeVenta({ onVentaEnCurso, pestana = 'productos', co
           total={carrito.totales.total}
           totalProductos={carrito.totalProductos}
           totalServicios={carrito.totalServicios}
+          tieneServicios={carrito.tieneServicios}
           financiada={carrito.financiada}
           config={config}
           clienteInicial={carrito.cliente}
           puntos={carrito.puntos}
+          cupon={carrito.cupon}
           puedeAutorizar={promos.puedeAutorizar}
           onCliente={carrito.ponerCliente}
           enviando={enviando}

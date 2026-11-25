@@ -24,6 +24,7 @@ const BASE = `
            count(*) FILTER (WHERE ps.estado_trabajo = 'listo') AS listos,
            count(*) FILTER (WHERE ps.estado_trabajo = 'entregado') AS entregados,
            count(*) FILTER (WHERE ps.estado_trabajo = 'cancelado') AS cancelados,
+           count(*) FILTER (WHERE ps.por_cotizar AND ps.cotizado_en IS NULL AND ps.estado_trabajo NOT IN ('cancelado', 'entregado')) AS por_cotizar,
            min(ps.fecha_prometida) FILTER (WHERE ps.estado_trabajo IN ('recibido', 'en_proceso', 'listo')) AS prometida
     FROM venta_partidas vp
     JOIN partida_servicio ps ON ps.partida_id = vp.id AND ps.empresa_id = vp.empresa_id
@@ -40,17 +41,60 @@ const PESTANAS = {
   canceladas: `AND sv.cancelados = sv.articulos`,
 };
 
-export async function listar(db, empresaId, sucursales, { pestana, buscar, limite, pagina }) {
+// El filtro por fecha de entrega solo aplica donde hay trabajos pendientes
+const PESTANAS_CON_FECHA = ['cobrar', 'espera', 'entregar'];
+
+// Agrega a "params" la fecha (si hay) y devuelve el pedazo de SQL. Mira los servicios aún pendientes de la nota.
+function filtroFecha(params, pestana, { fecha, atrasadas }) {
+  if (!PESTANAS_CON_FECHA.includes(pestana)) return '';
+  let cond;
+  if (fecha) {
+    params.push(fecha);
+    cond = `ps2.fecha_prometida = $${params.length}::date`;
+  } else if (atrasadas) {
+    cond = `ps2.fecha_prometida < (now() AT TIME ZONE COALESCE(s.zona_horaria, (SELECT zona_horaria FROM empresas WHERE id = v.empresa_id)))::date`;
+  } else {
+    return '';
+  }
+  return ` AND EXISTS (SELECT 1 FROM venta_partidas vp2
+                       JOIN partida_servicio ps2 ON ps2.partida_id = vp2.id AND ps2.empresa_id = vp2.empresa_id
+                       WHERE vp2.empresa_id = v.empresa_id AND vp2.venta_id = v.id AND vp2.tipo = 'servicio'
+                         AND ps2.estado_trabajo IN ('recibido', 'en_proceso', 'listo') AND ${cond})`;
+}
+
+// Fecha de entrega: solo cuenta lo que sigue pendiente (en espera o listo). Entregadas y canceladas no la usan.
+const SIN_FECHA = ['entregadas', 'canceladas'];
+const HOY_SQL = `(now() AT TIME ZONE COALESCE(s.zona_horaria, (SELECT zona_horaria FROM empresas WHERE id = v.empresa_id)))::date`;
+const conArticuloPendiente = (condicion) => ` AND EXISTS (
+    SELECT 1 FROM venta_partidas vx
+    JOIN partida_servicio px ON px.partida_id = vx.id AND px.empresa_id = vx.empresa_id
+    WHERE vx.empresa_id = v.empresa_id AND vx.venta_id = v.id AND vx.tipo = 'servicio'
+      AND px.estado_trabajo IN ('recibido', 'en_proceso', 'listo') AND ${condicion})`;
+
+// Devuelve el trozo de SQL (con AND al inicio) o ''. La fecha va como parámetro, nunca pegada al texto.
+function condicionFecha({ fecha, atrasadas } = {}, params) {
+  if (atrasadas) return conArticuloPendiente(`px.fecha_prometida < ${HOY_SQL}`);
+  if (fecha) {
+    params.push(fecha);
+    return conArticuloPendiente(`px.fecha_prometida = $${params.length}::date`);
+  }
+  return '';
+}
+
+export async function listar(db, empresaId, sucursales, { pestana, buscar, fecha, atrasadas, cotizar, limite, pagina }) {
   exigirEmpresa(empresaId);
   if (!PESTANAS[pestana]) throw new Error('Pestaña desconocida');
   const params = [empresaId, sucursales];
   let filtro = PESTANAS[pestana];
+  filtro += filtroFecha(params, pestana, { fecha, atrasadas });
+  if (cotizar) filtro += ' AND sv.por_cotizar > 0';
 
   if (buscar) {
     params.push(escaparLike(buscar));
     const n = params.length;
     filtro += ` AND (v.folio ILIKE $${n} OR c.nombre ILIKE $${n} OR c.telefono LIKE $${n})`;
   }
+  if (!SIN_FECHA.includes(pestana)) filtro += condicionFecha({ fecha, atrasadas }, params);
 
   const total = await db.query(`SELECT count(*) AS n ${BASE} ${filtro}`, params);
 
@@ -60,7 +104,7 @@ export async function listar(db, empresaId, sucursales, { pestana, buscar, limit
             s.nombre AS sucursal, COALESCE(s.zona_horaria, (SELECT zona_horaria FROM empresas WHERE id = v.empresa_id)) AS zona,
             c.nombre AS cliente_nombre, c.telefono AS cliente_telefono,
             pg.pagado, ${SALDO_SQL} AS saldo,
-            sv.articulos, sv.en_espera, sv.listos, sv.entregados, sv.cancelados, sv.prometida
+            sv.articulos, sv.en_espera, sv.listos, sv.entregados, sv.cancelados, sv.por_cotizar, sv.prometida
      ${BASE} ${filtro}
      ORDER BY v.creado_en DESC, v.id LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
@@ -69,12 +113,19 @@ export async function listar(db, empresaId, sucursales, { pestana, buscar, limit
 }
 
 // Cuántas notas hay en cada pestaña (para los contadores)
-export async function contar(db, empresaId, sucursales, verTodas) {
+export async function contar(db, empresaId, sucursales, verTodas, { fecha, atrasadas, cotizar } = {}) {
   exigirEmpresa(empresaId);
+  const params = [empresaId, sucursales];
+  // La fecha se agrega una sola vez como $3 y la usan todas las pestañas con fecha
+  if (fecha) params.push(fecha);
+  const filtroPestana = (k) => {
+    if (!PESTANAS_CON_FECHA.includes(k)) return '';
+    return filtroFecha(fecha ? [empresaId, sucursales] : params, k, { fecha, atrasadas });
+  };
   const columnas = Object.entries(PESTANAS)
     .filter(([k]) => verTodas || !PESTANAS_DE_GESTION.includes(k))
-    .map(([k, cond]) => `count(*) FILTER (WHERE TRUE ${cond}) AS ${k}`);
-  const r = await db.query(`SELECT ${columnas.join(', ')} ${BASE}`, [empresaId, sucursales]);
+    .map(([k, cond]) => `count(*) FILTER (WHERE TRUE ${cond}${filtroPestana(k)}${cotizar ? ' AND sv.por_cotizar > 0' : ''}) AS ${k}`);
+  const r = await db.query(`SELECT ${columnas.join(', ')} ${BASE}`, params);
   return r.rows[0];
 }
 
@@ -123,7 +174,7 @@ export async function listarArticulos(db, empresaId, ventaId) {
   exigirEmpresa(empresaId);
   const r = await db.query(
     `SELECT vp.id, vp.orden, vp.tipo, vp.nombre, vp.total,
-            ps.estado_trabajo, ps.fecha_prometida, ps.fecha_prometida_original, ps.listo_en, ps.tipo_articulo_nombre,
+            ps.estado_trabajo, ps.fecha_prometida, ps.fecha_prometida_original, ps.por_cotizar, ps.cotizado_en, ps.listo_en, ps.tipo_articulo_nombre,
             ps.venta_articulo_id, va.comentario, ps.cargo_financiamiento,
             pa.marca, pa.talla, pa.color, pa.modelo, pa.textura, pa.descripcion,
             pe.padre_partida_id
@@ -216,7 +267,7 @@ export async function pagosDeCobro(db, empresaId, cobroId) {
 export async function cargarPartidasEstado(db, empresaId, ventaId) {
   exigirEmpresa(empresaId);
   const r = await db.query(
-    `SELECT ps.partida_id, ps.estado_trabajo
+    `SELECT ps.partida_id, ps.estado_trabajo, ps.por_cotizar, ps.cotizado_en
      FROM partida_servicio ps
      JOIN venta_partidas vp ON vp.id = ps.partida_id AND vp.empresa_id = ps.empresa_id
      WHERE ps.empresa_id = $1 AND vp.venta_id = $2 FOR UPDATE OF ps`,
@@ -300,4 +351,64 @@ export async function cargarPies(db, empresaId, sucursalId) {
   );
   const f = r.rows[0] ?? {};
   return { recepcion: f.s_rec ?? f.e_rec ?? '', entrega: f.s_ent ?? f.e_ent ?? '' };
+}
+
+// ---------- Cotización ----------
+// Cuántos servicios de la nota siguen sin precio definitivo
+export async function pendientesDeCotizar(db, empresaId, ventaId) {
+  exigirEmpresa(empresaId);
+  const r = await db.query(
+    `SELECT count(*) AS n
+     FROM venta_partidas vp
+     JOIN partida_servicio ps ON ps.partida_id = vp.id AND ps.empresa_id = vp.empresa_id
+     WHERE vp.empresa_id = $1 AND vp.venta_id = $2 AND vp.tipo = 'servicio'
+       AND ps.por_cotizar AND ps.cotizado_en IS NULL AND ps.estado_trabajo NOT IN ('cancelado', 'entregado')`,
+    [empresaId, ventaId]
+  );
+  return Number(r.rows[0].n);
+}
+
+// Servicios de la nota bloqueados mientras dura la cotización
+export async function cargarParaCotizar(db, empresaId, ventaId) {
+  exigirEmpresa(empresaId);
+  const r = await db.query(
+    `SELECT vp.id, vp.total, vp.base, vp.iva, vp.tasa_iva,
+            ps.por_cotizar, ps.cotizado_en, ps.estado_trabajo, ps.cargo_financiamiento,
+            to_char(ps.fecha_prometida, 'YYYY-MM-DD') AS fecha_prometida
+     FROM venta_partidas vp
+     JOIN partida_servicio ps ON ps.partida_id = vp.id AND ps.empresa_id = vp.empresa_id
+     WHERE vp.empresa_id = $1 AND vp.venta_id = $2 AND vp.tipo = 'servicio'
+     FOR UPDATE OF vp, ps`,
+    [empresaId, ventaId]
+  );
+  return r.rows;
+}
+
+// p: { partidaId, precio, base, iva, total, fecha, cargo, usuarioId }
+export async function aplicarCotizacion(db, empresaId, p) {
+  exigirEmpresa(empresaId);
+  await db.query(
+    `UPDATE venta_partidas SET precio_lista = $3, precio_aplicado = $3, base = $4, iva = $5, total = $6
+     WHERE empresa_id = $1 AND id = $2`,
+    [empresaId, p.partidaId, p.precio, p.base, p.iva, p.total]
+  );
+  await db.query(
+    `UPDATE partida_servicio
+     SET fecha_prometida = $3::date,
+         fecha_prometida_original = COALESCE(fecha_prometida_original, $3::date),
+         cargo_financiamiento = $4,
+         cotizado_en = COALESCE(cotizado_en, now()),
+         cotizado_por = COALESCE(cotizado_por, $5::bigint)
+     WHERE empresa_id = $1 AND partida_id = $2`,
+    [empresaId, p.partidaId, p.fecha, p.cargo, p.usuarioId]
+  );
+}
+
+// Suma (o resta) la diferencia al total de la venta. Si no hay desglose de IVA, subtotal e iva siguen en null.
+export async function sumarTotalesVenta(db, empresaId, ventaId, { total, subtotal, iva }) {
+  exigirEmpresa(empresaId);
+  await db.query(
+    `UPDATE ventas SET total = total + $3, subtotal = subtotal + $4, iva = iva + $5 WHERE empresa_id = $1 AND id = $2`,
+    [empresaId, ventaId, total, subtotal, iva]
+  );
 }

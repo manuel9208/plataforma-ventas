@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { validar } from '../middlewares/validar.js';
 import { requerirPermiso } from '../middlewares/requerirPermiso.js';
 import { catalogoQuery, escanearQuery, sugerenciasQuery, crearVentaBody, canjeQuery } from '../validators/ventas.validator.js';
-import { idParams, listaQuery, cobrarBody, estadoBody, correccionBody } from '../validators/notas.validator.js';
+import { idParams, listaQuery, cobrarBody, estadoBody, correccionBody, cotizacionBody } from '../validators/notas.validator.js';
 import * as ctrl from '../controllers/caja.controller.js';
 import * as ctrlServicios from '../controllers/cajaServicios.controller.js';
 import * as ctrlNotas from '../controllers/notas.controller.js';
@@ -14,6 +14,10 @@ import { cancelarBody, reembolsarBody } from '../validators/ajustes.validator.js
 import * as ctrlAjustes from '../controllers/ajustes.controller.js';
 import * as ctrlPromos from '../controllers/cajaPromociones.controller.js';
 import * as ctrlCanje from '../controllers/canjePuntos.controller.js';
+import * as ctrlCupones from '../controllers/cuponesCaja.controller.js';
+import { cuponQuery } from '../validators/cupones.validator.js';
+import { adicionBody } from '../validators/adiciones.validator.js';
+import * as ctrlAdiciones from '../controllers/adiciones.controller.js';
 
 const router = Router();
 
@@ -26,6 +30,7 @@ router.get('/servicios', validar({ query: catalogoQuery }), ctrlServicios.servic
 router.get('/sugerencias', validar({ query: sugerenciasQuery }), ctrlServicios.sugerencias);
 router.get('/promociones', ctrlPromos.vigentes);
 router.get('/canje', validar({ query: canjeQuery }), ctrlCanje.consultar);
+router.get('/cupon', validar({ query: cuponQuery }), ctrlCupones.consultar);
 router.post('/ventas', validar({ body: crearVentaBody }), ctrl.crearVenta);
 router.get('/ventas', validar({ query: ventasListaQuery }), ctrlVentas.listar);
 router.get('/ventas/:id', validar({ params: idParams }), ctrlVentas.obtener);
@@ -38,6 +43,8 @@ router.post('/notas/:id/cobros', validar({ params: idParams, body: cobrarBody })
 router.post('/notas/:id/copia', validar({ params: idParams }), ctrlNotas.copia);
 router.patch('/notas/:id/estado', validar({ params: idParams, body: estadoBody }), ctrlNotas.cambiarEstado);
 router.patch('/notas/:id/correccion', validar({ params: idParams, body: correccionBody }), ctrlNotas.corregir);
+router.patch('/notas/:id/cotizacion', validar({ params: idParams, body: cotizacionBody }), ctrlNotas.cotizar);
+router.post('/notas/:id/adiciones', validar({ params: idParams, body: adicionBody }), ctrlAdiciones.agregar);
 router.post('/notas/:id/entregas', validar({ params: idParams, body: entregarBody }), ctrlEntregas.entregar);
 router.post('/notas/:id/cancelaciones', validar({ params: idParams, body: cancelarBody }), ctrlAjustes.cancelar);
 router.post('/notas/:id/reembolsos', validar({ params: idParams, body: reembolsarBody }), ctrlAjustes.reembolsar);

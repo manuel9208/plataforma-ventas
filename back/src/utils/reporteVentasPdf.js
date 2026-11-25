@@ -16,6 +16,7 @@ const PESOS = {
   articulos: 4,
   descuentoPromocion: 1.3,
   descuentoManual: 1.2,
+  descuentoCupon: 1.2,
   puntosUsados: 1.1,
   financiamiento: 1.2,
 };
@@ -72,6 +73,7 @@ export async function construirPdf(d) {
     grupo('Descuentos y cargos (incluidos en lo vendido)'),
     ['Por promociones', fmt.dinero(c.descuentoPromocion)],
     ['Descuentos manuales', fmt.dinero(c.descuentoManual)],
+    ['Por cupones', fmt.dinero(c.descuentoCupon)],
     ['Puntos usados', fmt.dinero(c.puntosUsados)],
     ...(d.esLimpieza ? [['Financiamiento cobrado', fmt.dinero(c.financiamiento)]] : []),
     ...(c.iva > 0 ? [['IVA', fmt.dinero(c.iva)]] : []),

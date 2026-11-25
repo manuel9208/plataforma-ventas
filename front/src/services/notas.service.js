@@ -8,3 +8,5 @@ export const cambiarEstado = (id, datos) => apiFetch(`/caja/notas/${id}/estado`,
 export const entregar = (id, datos) => apiFetch(`/caja/notas/${id}/entregas`, { metodo: 'POST', cuerpo: datos });
 export const cancelar = (id, datos) => apiFetch(`/caja/notas/${id}/cancelaciones`, { metodo: 'POST', cuerpo: datos });
 export const reembolsar = (id, datos) => apiFetch(`/caja/notas/${id}/reembolsos`, { metodo: 'POST', cuerpo: datos });
+export const cotizar = (id, datos) => apiFetch(`/caja/notas/${id}/cotizacion`, { metodo: 'PATCH', cuerpo: datos });
+export const adicionar = (id, datos) => apiFetch(`/caja/notas/${id}/adiciones`, { metodo: 'POST', cuerpo: datos });

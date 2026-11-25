@@ -31,6 +31,7 @@ export function filaVenta(f, articulos = null) {
     descuentoPromocion: n(f.descuento_promocion),
     descuentoManual: n(f.descuento_manual),
     puntosUsados: n(f.puntos_usados),
+    descuentoCupon: n(f.descuento_cupon),
     financiamiento: n(f.financiamiento),
     financiada: Boolean(f.financiada),
     articulos,
@@ -69,6 +70,7 @@ export function respuestaVentas({ filas, grupos, pagos, devoluciones, atras, suc
       descuentoPromocion: n(g.descuento_promocion),
       descuentoManual: n(g.descuento_manual),
       puntosUsados: n(g.puntos_usados),
+      descuentoCupon: n(g.descuento_cupon),
       financiamiento: n(g.financiamiento),
       entro: { ...neto, total: aMonto(c(neto.efectivo) + c(neto.tarjeta) + c(neto.transferencia)) },
     };
@@ -86,6 +88,7 @@ export function respuestaVentas({ filas, grupos, pagos, devoluciones, atras, suc
     descuentoPromocion: suma(porSucursal, 'descuentoPromocion'),
     descuentoManual: suma(porSucursal, 'descuentoManual'),
     puntosUsados: suma(porSucursal, 'puntosUsados'),
+    descuentoCupon: suma(porSucursal, 'descuentoCupon'),
     financiamiento: suma(porSucursal, 'financiamiento'),
     entro: {
       efectivo: aMonto(porSucursal.reduce((s, x) => s + c(x.entro.efectivo), 0)),

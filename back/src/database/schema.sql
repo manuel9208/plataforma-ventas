@@ -1474,7 +1474,112 @@ CREATE INDEX IF NOT EXISTS idx_puntos_venta ON puntos_movimientos (empresa_id, v
 ALTER TABLE empresa_config ADD COLUMN IF NOT EXISTS meta_crecimiento NUMERIC(5,2) NOT NULL DEFAULT 5 CHECK (meta_crecimiento >= 0 AND meta_crecimiento <= 100);
 ALTER TABLE sucursal_config ADD COLUMN IF NOT EXISTS meta_crecimiento NUMERIC(5,2) CHECK (meta_crecimiento >= 0 AND meta_crecimiento <= 100);
 
+-- ============ BLOQUE 41: CUPONES ============
+CREATE TABLE IF NOT EXISTS cupones (
+id BIGSERIAL PRIMARY KEY,
+empresa_id BIGINT NOT NULL REFERENCES empresas(id),
+nombre TEXT NOT NULL CHECK (char_length(nombre) BETWEEN 2 AND 60),
+codigo TEXT NOT NULL CHECK (codigo ~ '^[A-Z0-9]{4,20}$'),
+modo TEXT NOT NULL CHECK (modo IN ('porcentaje', 'monto')),
+valor NUMERIC(12,2) NOT NULL CHECK (valor > 0),
+desde DATE,
+hasta DATE,
+veces_por_cliente INTEGER NOT NULL DEFAULT 1 CHECK (veces_por_cliente BETWEEN 1 AND 100),
+max_clientes INTEGER CHECK (max_clientes > 0),
+cliente_id UUID,
+encendido BOOLEAN NOT NULL DEFAULT TRUE,
+activo BOOLEAN NOT NULL DEFAULT TRUE,
+baja_motivo TEXT CHECK (char_length(baja_motivo) <= 200),
+baja_en TIMESTAMPTZ,
+baja_por_usuario BIGINT,
+baja_por_global BIGINT REFERENCES admins_globales(id),
+creado_por_usuario BIGINT,
+creado_por_global BIGINT REFERENCES admins_globales(id),
+creado_en TIMESTAMPTZ NOT NULL DEFAULT now(),
+actualizado_en TIMESTAMPTZ NOT NULL DEFAULT now(),
+UNIQUE (id, empresa_id),
+FOREIGN KEY (cliente_id, empresa_id) REFERENCES clientes(id, empresa_id),
+FOREIGN KEY (creado_por_usuario, empresa_id) REFERENCES usuarios(id, empresa_id),
+FOREIGN KEY (baja_por_usuario, empresa_id) REFERENCES usuarios(id, empresa_id),
+CHECK (desde IS NULL OR hasta IS NULL OR desde <= hasta),
+CHECK (modo <> 'porcentaje' OR valor <= 99)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cupones_codigo ON cupones (empresa_id, codigo) WHERE activo;
+CREATE INDEX IF NOT EXISTS idx_cupones_empresa ON cupones (empresa_id, activo, encendido);
+CREATE TABLE IF NOT EXISTS cupon_sucursales (
+empresa_id BIGINT NOT NULL REFERENCES empresas(id),
+cupon_id BIGINT NOT NULL,
+sucursal_id BIGINT NOT NULL,
+PRIMARY KEY (cupon_id, sucursal_id),
+FOREIGN KEY (cupon_id, empresa_id) REFERENCES cupones(id, empresa_id),
+FOREIGN KEY (sucursal_id, empresa_id) REFERENCES sucursales(id, empresa_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cupon_sucursales_empresa ON cupon_sucursales (empresa_id, sucursal_id);
+CREATE TABLE IF NOT EXISTS cupon_usos (
+id UUID NOT NULL DEFAULT gen_random_uuid(),
+empresa_id BIGINT NOT NULL REFERENCES empresas(id),
+cupon_id BIGINT NOT NULL,
+cliente_id UUID NOT NULL,
+venta_id UUID NOT NULL,
+sucursal_id BIGINT NOT NULL,
+descuento NUMERIC(12,2) NOT NULL CHECK (descuento > 0),
+usuario_id BIGINT,
+creado_en TIMESTAMPTZ NOT NULL DEFAULT now(),
+liberado_en TIMESTAMPTZ,
+PRIMARY KEY (id),
+UNIQUE (empresa_id, venta_id),
+FOREIGN KEY (cupon_id, empresa_id) REFERENCES cupones(id, empresa_id),
+FOREIGN KEY (cliente_id, empresa_id) REFERENCES clientes(id, empresa_id),
+FOREIGN KEY (venta_id, empresa_id) REFERENCES ventas(id, empresa_id),
+FOREIGN KEY (sucursal_id, empresa_id) REFERENCES sucursales(id, empresa_id),
+FOREIGN KEY (usuario_id, empresa_id) REFERENCES usuarios(id, empresa_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cupon_usos_cupon ON cupon_usos (empresa_id, cupon_id, liberado_en);
+CREATE INDEX IF NOT EXISTS idx_cupon_usos_cliente ON cupon_usos (empresa_id, cliente_id);
+
 -- ============ BLOQUE 42: CANJE DE PUNTOS EN LA VENTA ============
 ALTER TABLE venta_partidas
 ADD COLUMN IF NOT EXISTS puntos_canjeados INTEGER NOT NULL DEFAULT 0 CHECK (puntos_canjeados >= 0),
 ADD COLUMN IF NOT EXISTS descuento_puntos NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (descuento_puntos >= 0);
+
+-- ============ BLOQUE 43: EL CUPÓN CUENTA COMO DESCUENTO ============
+ALTER TABLE venta_partidas DROP CONSTRAINT IF EXISTS venta_partidas_descuento_origen_check;
+ALTER TABLE venta_partidas ADD CONSTRAINT venta_partidas_descuento_origen_check CHECK (descuento_origen IN ('promocion', 'manual', 'cupon'));
+
+-- ============ BLOQUE: 44 SERVICIOS QUE SE COTIZAN CON UN TERCERO ============
+ALTER TABLE servicios
+ADD COLUMN IF NOT EXISTS requiere_cotizacion BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS contacto_cotizacion TEXT CHECK (char_length(contacto_cotizacion) <= 300);
+
+-- ============ BLOQUE 45: NOTAS CON SERVICIOS POR COTIZAR ============
+ALTER TABLE partida_servicio ALTER COLUMN fecha_prometida DROP NOT NULL;
+ALTER TABLE partida_servicio ALTER COLUMN fecha_prometida_original DROP NOT NULL;
+ALTER TABLE partida_servicio ADD COLUMN IF NOT EXISTS por_cotizar BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS idx_partida_servicio_por_cotizar ON partida_servicio (empresa_id) WHERE por_cotizar;
+
+-- ============ BLOQUE 46: COTIZACION DE LA NOTA ============
+ALTER TABLE partida_servicio ADD COLUMN IF NOT EXISTS cotizado_en TIMESTAMPTZ;
+ALTER TABLE partida_servicio ADD COLUMN IF NOT EXISTS cotizado_por BIGINT;
+
+-- ============ BLOQUE 47: ADICIONES A NOTAS ABIERTAS ============
+CREATE TABLE IF NOT EXISTS venta_adiciones (
+  id UUID NOT NULL,
+  empresa_id BIGINT NOT NULL REFERENCES empresas(id),
+  venta_id UUID NOT NULL,
+  sucursal_id BIGINT NOT NULL,
+  turno_id UUID NOT NULL,
+  usuario_id BIGINT NOT NULL,
+  subtotal NUMERIC(12,2),
+  iva NUMERIC(12,2),
+  total NUMERIC(12,2) NOT NULL CHECK (total >= 0),
+  creado_en TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (id),
+  UNIQUE (id, empresa_id),
+  FOREIGN KEY (venta_id, empresa_id) REFERENCES ventas(id, empresa_id),
+  FOREIGN KEY (sucursal_id, empresa_id) REFERENCES sucursales(id, empresa_id),
+  FOREIGN KEY (turno_id, empresa_id) REFERENCES turnos(id, empresa_id),
+  FOREIGN KEY (usuario_id, empresa_id) REFERENCES usuarios(id, empresa_id)
+);
+CREATE INDEX IF NOT EXISTS idx_venta_adiciones_venta ON venta_adiciones (empresa_id, venta_id);
+ALTER TABLE venta_partidas ADD COLUMN IF NOT EXISTS adicion_id UUID REFERENCES venta_adiciones(id);
+CREATE INDEX IF NOT EXISTS idx_venta_partidas_adicion ON venta_partidas (empresa_id, adicion_id) WHERE adicion_id IS NOT NULL;

@@ -15,6 +15,7 @@ export default function ModalArticulo({ modo = 'completo', servicio, precio, con
   const dinero = (v) => formatearMoneda(v, empresa.moneda);
   const conDatos = modo !== 'servicio';
   const conServicio = modo !== 'datos';
+  const cotiza = conServicio && servicio?.requiereCotizacion === true;
 
   const dias = servicio?.tiempoDias ?? 0;
   const fechaPorDefecto = sumarDias(config.hoy, dias);
@@ -33,10 +34,10 @@ export default function ModalArticulo({ modo = 'completo', servicio, precio, con
     onAceptar({
       datos,
       comentario,
-      extraIds,
+      extraIds: cotiza ? [] : extraIds,
       // Solo se manda la fecha si el cajero la cambió; si no, el servidor calcula la suya
-      fechaPrometida: conServicio && fecha !== fechaPorDefecto ? fecha : null,
-      fechaMostrada: fecha,
+      fechaPrometida: conServicio && !cotiza && fecha !== fechaPorDefecto ? fecha : null,
+      fechaMostrada: cotiza ? null : fecha,
     });
   };
 
@@ -63,8 +64,19 @@ export default function ModalArticulo({ modo = 'completo', servicio, precio, con
       <form id="form-articulo" onSubmit={enviar} className="space-y-5">
         {conServicio && (
           <p className="text-sm text-neutral-500">
-            {precio.tipo} · <span className="font-semibold text-neutral-800">{dinero(precio.precio)}</span>
+            {precio.tipo}
+            {!cotiza && (
+              <>
+                {' · '}
+                <span className="font-semibold text-neutral-800">{dinero(precio.precio)}</span>
+              </>
+            )}
           </p>
+        )}
+        {cotiza && (
+          <div className="rounded-xl bg-amber-50 text-amber-800 text-sm p-3">
+            Este servicio se cotiza. El precio y la fecha de entrega se definen al cotizar la nota.
+          </div>
         )}
 
         {conDatos && (
@@ -83,7 +95,7 @@ export default function ModalArticulo({ modo = 'completo', servicio, precio, con
           </>
         )}
 
-        {conServicio && servicio.extras.length > 0 && (
+        {conServicio && !cotiza && servicio.extras.length > 0 && (
           <fieldset>
             <legend className="text-sm font-medium text-neutral-600 mb-2">Extras</legend>
             <div className="space-y-1">
@@ -103,7 +115,7 @@ export default function ModalArticulo({ modo = 'completo', servicio, precio, con
           </fieldset>
         )}
 
-        {conServicio && (
+        {conServicio && !cotiza && (
           <Campo
             etiqueta="Fecha prometida"
             type="date"

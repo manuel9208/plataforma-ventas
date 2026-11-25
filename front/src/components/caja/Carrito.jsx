@@ -33,6 +33,7 @@ export default function Carrito({
   onOtroServicio,
   onCliente,
   onDescuento,
+  adicion = false,
 }) {
   const { empresa } = useAuth();
   const dinero = (v) => formatearMoneda(v, empresa.moneda);
@@ -49,7 +50,7 @@ export default function Carrito({
         )}
       </div>
 
-      {carrito.tieneServicios && (
+      {carrito.tieneServicios && !adicion && (
         <button
           type="button"
           onClick={onCliente}
@@ -142,10 +143,12 @@ export default function Carrito({
 
                       <div className="flex items-end justify-between gap-3 mt-2">
                         <div className="flex flex-wrap gap-2">
-                          <button type="button" onClick={() => onEditarServicio(g, s)} className={BOTON}>
-                            Editar
-                          </button>
-                          {descuento.disponible && (
+                          {!s.servicio.requiereCotizacion && (
+                            <button type="button" onClick={() => onEditarServicio(g, s)} className={BOTON}>
+                              Editar
+                            </button>
+                          )}
+                          {descuento.disponible && !s.servicio.requiereCotizacion && (
                             <BotonDescuento
                               pct={s.manualPct}
                               onAbrir={() => onDescuento({ clave: s.clave, nombre: `${s.servicio.nombre} · ${s.precio.tipo}` })}
@@ -154,7 +157,11 @@ export default function Carrito({
                           )}
                         </div>
                         <div className="text-right shrink-0">
-                          <p className="font-semibold text-sm">{dinero(s.totalServicio)}</p>
+                          {s.servicio.requiereCotizacion ? (
+                            <p className="font-semibold text-sm text-amber-700">Por cotizar</p>
+                          ) : (
+                            <p className="font-semibold text-sm">{dinero(s.totalServicio)}</p>
+                          )}
                           {s.descuento > 0 && <p className="text-xs text-neutral-400 line-through">{dinero(s.totalSinPromo)}</p>}
                         </div>
                       </div>
@@ -305,7 +312,26 @@ export default function Carrito({
             </button>
           </div>
         )}
-        {carrito.puedeFinanciar && carrito.tieneServicios && (
+        {carrito.cupon.actual && (
+          <div className="flex justify-between text-sm font-medium text-emerald-700">
+            <span>Cupón {carrito.cupon.info.codigo}</span>
+            <span>−{dinero(carrito.cupon.actual.descuento)}</span>
+          </div>
+        )}
+        {carrito.cupon.error && (
+          <div className="rounded-xl bg-amber-50 text-amber-800 text-xs p-3 mt-2">
+            {carrito.cupon.error}{' '}
+            <button type="button" onClick={carrito.cupon.quitar} className="font-semibold underline underline-offset-2">
+              Quitar cupón
+            </button>
+          </div>
+        )}
+        {carrito.numPorCotizar > 0 && (
+          <p className="rounded-xl bg-amber-50 text-amber-800 text-xs p-3">
+            {carrito.numPorCotizar} {carrito.numPorCotizar === 1 ? 'servicio se cotiza' : 'servicios se cotizan'} después. Su precio se suma al cotizar la nota.
+          </p>
+        )}
+        {carrito.puedeFinanciar && carrito.tieneServicios && !adicion && (
           <div className="pb-2">
             <Interruptor
               etiqueta="Financiado"
@@ -333,8 +359,8 @@ export default function Carrito({
           </div>
         )}
 
-        <Boton className="w-full mt-3" disabled={carrito.vacio || carrito.faltaAutorizacion || Boolean(carrito.puntos.error)} onClick={onCobrar}>
-          {carrito.tieneServicios ? (carrito.financiada ? 'Cobrar financiado' : 'Cobrar abono') : 'Cobrar'}
+        <Boton className="w-full mt-3" disabled={carrito.vacio || carrito.faltaAutorizacion || Boolean(carrito.puntos.error) || Boolean(carrito.cupon.error)} onClick={onCobrar}>
+          {adicion ? 'Agregar a la nota' : carrito.tieneServicios ? (carrito.financiada ? 'Cobrar financiado' : 'Cobrar abono') : 'Cobrar'}
         </Boton>
       </div>
     </div>

@@ -20,7 +20,7 @@ export const sugerenciasQuery = z.object({
   buscar: z.string().trim().max(40).optional(),
 });
 
-const linea = z
+export const linea = z
   .object({
     presentacionId: idNumero,
     cantidad: z.number().positive().max(99999),
@@ -60,7 +60,7 @@ const servicioDeArticulo = z
   .strict();
 
 // Un artículo físico (unos tenis) con uno o varios servicios y un comentario interno
-const articuloNota = z
+export const articuloNota = z
   .object({
     datos: articulo,
     comentario: z.string().trim().max(300).optional(),
@@ -107,6 +107,9 @@ const canjeDePuntos = z
     message: 'Indica el PIN del cliente o la autorización de un encargado',
   });
 
+// Cupón: solo el código. El servidor decide todo lo demás
+const cuponEnVenta = z.object({ codigo: z.string().trim().min(3).max(30) }).strict();
+
 export const crearVentaBody = z
   .object({
     id: z.string().uuid('Venta inválida'),
@@ -117,6 +120,7 @@ export const crearVentaBody = z
     pagos: z.array(pago).max(6).default([]),
     descuentos: descuentosManuales.optional(),
     canje: canjeDePuntos.optional(),
+    cupon: cuponEnVenta.optional(),
     // El total que vio la Caja: el servidor lo compara con el suyo, nunca lo usa para cobrar
     totalMostrado: dinero.optional(),
     financiada: z.boolean().optional(),
@@ -127,5 +131,8 @@ export const crearVentaBody = z
   .refine((d) => d.lineas.length + d.servicios.length + d.articulos.length > 0, { message: 'El carrito está vacío' })
   .refine((d) => !(d.servicios.length && d.articulos.length), { message: 'Manda los servicios sueltos o por artículo, no ambos' })
   .refine((d) => !(d.clienteId && d.clienteNuevo), { message: 'Indica un cliente existente o uno nuevo, no ambos' })
-  .refine((d) => !d.canje || Boolean(d.clienteId), { message: 'Para usar puntos elige al cliente registrado' });
+  .refine((d) => !d.canje || Boolean(d.clienteId), { message: 'Para usar puntos elige al cliente registrado' })
+  .refine((d) => !d.cupon || Boolean(d.clienteId), { message: 'Para usar un cupón elige al cliente registrado' })
+  .refine((d) => !(d.cupon && d.canje), { message: 'Un cupón no se puede usar junto con puntos' })
+  .refine((d) => !(d.cupon && d.descuentos), { message: 'Un cupón no se puede usar junto con un descuento manual' });
   export const canjeQuery = z.object({ clienteId: z.string().uuid('Cliente inválido') });

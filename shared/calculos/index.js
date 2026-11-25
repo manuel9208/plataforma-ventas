@@ -29,3 +29,4 @@ export * from './reporteVentas.js';
 export * from './estadisticasVentas.js';
 export * from './analisisVentas.js';
 export * from './canjePuntos.js';
+export * from './cupones.js';

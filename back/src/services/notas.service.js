@@ -1,4 +1,7 @@
 import {
+  aCentavos,
+  aMonto,
+  calcularLineaVenta,
   armarFolio,
   hoyEnZona,
   normalizarPagos,
@@ -30,6 +33,9 @@ const noGlobal = (actor) => {
 };
 const puedeGestionar = (actor) => tienePermiso(actor.permisos, 'notas.gestionar');
 const puedeEditar = (actor) => tienePermiso(actor.permisos, 'notas.editar');
+// Cotizar: AdminGlobal (0), Administrador (1) y Gerente (2), por nivel de rol
+const NIVEL_MAX_COTIZAR = 2;
+const puedeCotizar = (actor) => actor.esGlobal === true || (Number.isInteger(actor.nivel) && actor.nivel <= NIVEL_MAX_COTIZAR);
 
 // Una nota entregada o cancelada solo la ve quien tiene notas.gestionar
 function exigirVisible(actor, estado) {
@@ -66,6 +72,7 @@ export async function cargarDetalle(db, actor, id) {
   ]);
   const detalle = notaDetalle(v, productos, articulos, pagos, pies, { vigentes, reembolsos });
   detalle.pinEntregaActivo = config.pinEntregaActivo;
+  detalle.puedeCotizar = puedeCotizar(actor);
   const datos = {
     empresa: v.empresa_nombre,
     sucursal: v.sucursal_nombre,
@@ -88,7 +95,7 @@ export async function listar(actor, consulta) {
   }
   const [{ filas, total }, conteos] = await Promise.all([
     repo.listar(pool, actor.empresaId, actor.sucursales, consulta),
-    repo.contar(pool, actor.empresaId, actor.sucursales, gestor),
+    repo.contar(pool, actor.empresaId, actor.sucursales, gestor, { fecha: consulta.fecha, atrasadas: consulta.atrasadas, cotizar: consulta.cotizar }),
   ]);
   return {
     datos: filas.map(notaLista),
@@ -203,6 +210,10 @@ export async function cambiarEstado(actor, ventaId, { estado, partidaIds, motivo
     if (!cambios.length) throw new ErrorHttp(400, 'No hay nada que cambiar');
 
     for (const f of cambios) {
+      // Un servicio por cotizar no puede quedar Listo hasta tener su precio
+      if (nuevo === 'listo' && f.por_cotizar && !f.cotizado_en) {
+        throw new ErrorHttp(409, 'Hay servicios por cotizar. Defínele el precio antes de marcarlo como listo.');
+      }
       // Entregado y cancelado tienen su propio flujo (PIN del cliente y reembolso)
       if (f.estado_trabajo === 'entregado' || f.estado_trabajo === 'cancelado') {
         throw new ErrorHttp(409, 'Un artículo entregado o cancelado ya no se puede cambiar desde aquí');
@@ -293,6 +304,103 @@ export async function corregir(actor, ventaId, datos, ip) {
 
     // Todo cambio queda con motivo y con quién lo hizo. El dinero nunca se toca aquí.
     await bitacora(db, actor, 'nota.corregir', ventaId, v.sucursal_id, { motivo: datos.motivo }, cambios, ip);
+    return { ...(await cargarDetalle(db, actor, ventaId)), puedeGestionar: puedeGestionar(actor), puedeEditar: puedeEditar(actor) };
+  });
+}
+
+// ---------- Cotización: precio y fecha definitivos de los servicios "por cotizar" ----------
+const cent = (v) => Math.round(aCentavos(Number(v ?? 0)));
+const sumarImporte = (a, b) => (a == null || b == null ? null : aMonto(cent(a) + cent(b)));
+
+export async function cotizar(actor, ventaId, { servicios }, ip) {
+  if (!puedeCotizar(actor)) throw new ErrorHttp(403, 'Solo el administrador o el gerente pueden cotizar');
+  const e = actor.empresaId;
+
+  return conTransaccion(async (db) => {
+    const v = await repo.bloquearVenta(db, e, ventaId, actor.sucursales);
+    if (!v || !v.tiene_servicios) throw new ErrorHttp(404, 'Nota no encontrada');
+    const info = await repo.obtener(db, e, actor.sucursales, ventaId);
+    const hoy = hoyEnZona(info.zona);
+    const incluyeIva = info.precios_incluyen_iva; // el IVA se calcula como se creó la nota
+    const config = await notasRepo.cargarConfig(db, e, v.sucursal_id);
+    const porId = new Map((await repo.cargarParaCotizar(db, e, ventaId)).map((f) => [f.id, f]));
+
+    let dTotal = 0;
+    let dBase = 0;
+    let dIva = 0;
+    const antes = [];
+    const despues = [];
+
+    for (const s of servicios) {
+      const f = porId.get(s.partidaId);
+      if (!f) throw new ErrorHttp(400, 'Hay un servicio que no pertenece a esta nota');
+      if (!f.por_cotizar) throw new ErrorHttp(400, 'Ese servicio tiene precio fijo: no se cotiza');
+      if (f.estado_trabajo === 'entregado' || f.estado_trabajo === 'cancelado') {
+        throw new ErrorHttp(409, 'Un servicio entregado o cancelado ya no se cotiza');
+      }
+      // Conservar la fecha que ya tenía siempre se permite (aunque ya haya pasado)
+      if (s.fechaPrometida !== f.fecha_prometida && s.fechaPrometida < hoy) {
+        throw new ErrorHttp(400, 'La fecha prometida no puede ser anterior a hoy');
+      }
+      if (s.fechaPrometida > sumarDias(hoy, MAX_DIAS_PROMESA)) throw new ErrorHttp(400, 'La fecha prometida está demasiado lejos');
+
+      // Nota financiada: el cargo se fija al cotizar por primera vez y después se conserva
+      const tasa = Number(f.tasa_iva);
+      const primera = !f.cotizado_en;
+      const cargoPrecio = primera ? (info.financiada ? config.financiamientoCargo : 0) : Number(f.cargo_financiamiento ?? 0);
+      const principal = calcularLineaVenta({ precioBase: s.precio, mayoreo: [], cantidad: 1, tasa, incluyeIva });
+      const cargo = cargoPrecio > 0 ? calcularLineaVenta({ precioBase: cargoPrecio, mayoreo: [], cantidad: 1, tasa, incluyeIva }) : null;
+
+      const total = aMonto(cent(principal.total) + cent(cargo?.total));
+      const base = sumarImporte(principal.subtotal, cargo ? cargo.subtotal : 0);
+      const iva = sumarImporte(principal.iva, cargo ? cargo.iva : 0);
+
+      dTotal += cent(total) - cent(f.total);
+      if (base != null && f.base != null) dBase += cent(base) - cent(f.base);
+      if (iva != null && f.iva != null) dIva += cent(iva) - cent(f.iva);
+
+      await repo.aplicarCotizacion(db, e, {
+        partidaId: f.id,
+        precio: s.precio,
+        base,
+        iva,
+        total,
+        fecha: s.fechaPrometida,
+        cargo: cargo ? cargo.total : 0,
+        usuarioId: actor.id ?? null,
+      });
+      antes.push({ partidaId: f.id, precio: primera ? null : Number((Number(f.total) - Number(f.cargo_financiamiento ?? 0)).toFixed(2)), fecha: f.fecha_prometida });
+      despues.push({ partidaId: f.id, precio: s.precio, fecha: s.fechaPrometida });
+    }
+
+    await repo.sumarTotalesVenta(db, e, ventaId, { total: aMonto(dTotal), subtotal: aMonto(dBase), iva: aMonto(dIva) });
+
+    // Si el precio baja, el cliente no puede haber pagado más que lo que vale ahora la nota
+    if (dTotal < 0) {
+      const r = resumenNota({
+        total: Number(v.total) + aMonto(dTotal),
+        cancelado: v.cancelado,
+        ajustado: v.ajustado,
+        retenido: v.retenido,
+        reembolsado: v.reembolsado,
+        cobrado: await repo.totalPagado(db, e, ventaId),
+      });
+      if (r.pagado > r.total) throw new ErrorHttp(409, 'El cliente ya pagó más que el nuevo total. Haz primero un reembolso.');
+    }
+
+    await registrarBitacora(db, {
+      empresaId: e,
+      sucursalId: v.sucursal_id,
+      usuarioId: actor.id,
+      adminGlobalId: actor.adminGlobalId,
+      accion: 'nota.cotizar',
+      entidad: 'venta',
+      entidadUuid: ventaId,
+      antes: { servicios: antes, total: Number(v.total) },
+      despues: { servicios: despues, total: aMonto(cent(v.total) + dTotal) },
+      ip,
+    });
+
     return { ...(await cargarDetalle(db, actor, ventaId)), puedeGestionar: puedeGestionar(actor), puedeEditar: puedeEditar(actor) };
   });
 }

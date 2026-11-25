@@ -98,6 +98,8 @@ export function agruparPorArticulo(servicios = []) {
 }
 
 const datosDeArticulo = (articulo) => Object.values(articulo ?? {}).filter(Boolean).join(' · ');
+// Un servicio por cotizar todavía no tiene fecha
+const textoEntrega = (fmt, s) => (s.porCotizar ? 'por definir' : fmt.fechaLarga(s.fechaPrometida));
 
 // ---------- Ticket del cliente ----------
 export function ticketCliente(venta, { ancho = 80, empresa = '', esCopia = false, abrirCajon = false, corte = true, fmt }) {
@@ -124,11 +126,11 @@ export function ticketCliente(venta, { ancho = 80, empresa = '', esCopia = false
       const datos = datosDeArticulo(g.articulo);
       if (datos) t.texto(datos, { negrita: true });
       for (const s of g.servicios) {
-        t.fila(s.nombre, fmt.dinero(s.total));
+        t.fila(s.nombre, s.porCotizar ? 'Por cotizar' : fmt.dinero(s.total));
         if (s.promocion) t.texto(`${s.promocion} · ahorro ${fmt.dinero(s.descuento)}`, { sangria: 2 });
         for (const x of s.extras) t.fila(`+ ${x.nombre}`, fmt.dinero(x.total), { sangria: 2 });
         if (s.cargoFinanciamiento > 0) t.texto(`Incluye financiamiento ${fmt.dinero(s.cargoFinanciamiento)}`, { sangria: 2 });
-        t.texto(`Entrega: ${fmt.fechaLarga(s.fechaPrometida)}`, { sangria: 2 });
+        t.texto(`Entrega: ${textoEntrega(fmt, s)}`, { sangria: 2 });
       }
       t.espacio();
     }
@@ -207,7 +209,7 @@ export function ticketArea(venta, { ancho = 80, corte = true, fmt }) {
     for (const s of g.servicios) {
       t.casilla(s.nombre);
       for (const x of s.extras) t.texto(`+ ${x.nombre}`, { sangria: 4 });
-      t.texto(`Entrega: ${fmt.fechaLarga(s.fechaPrometida)}`, { sangria: 4 });
+      t.texto(`Entrega: ${textoEntrega(fmt, s)}`, { sangria: 4 });
     }
     t.espacio();
   }
@@ -283,7 +285,7 @@ export function ticketEntregaTermico(ticket, { ancho = 80, corte = true, empresa
       anterior = datos;
       t.texto(`[ ] ${s.nombre}`);
       for (const x of s.extras ?? []) t.texto(`+ ${x.nombre}`, { sangria: 4 });
-      t.texto(`${s.estado === 'listo' ? 'Listo para recoger' : 'En espera'} · Entrega: ${fmt.fechaLarga(s.fechaPrometida)}`, { sangria: 4 });
+      t.texto(`${s.estado === 'listo' ? 'Listo para recoger' : 'En espera'} · Entrega: ${textoEntrega(fmt, s)}`, { sangria: 4 });
     }
   } else {
     t.texto('NOTA ENTREGADA COMPLETA', CENTRO_NEGRITA);

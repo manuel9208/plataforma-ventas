@@ -39,6 +39,7 @@ export default function DesgloseReporte({ cifras: c, esLimpieza }) {
       <Bloque titulo="Descuentos y cargos" nota="Incluidos en lo vendido">
         <Fila etiqueta="Por promociones" valor={dinero(c.descuentoPromocion)} vacio={c.descuentoPromocion === 0} />
         <Fila etiqueta="Descuentos manuales" valor={dinero(c.descuentoManual)} vacio={c.descuentoManual === 0} />
+        <Fila etiqueta="Cupones" valor={dinero(c.descuentoCupon)} vacio={c.descuentoCupon === 0} />
         <Fila etiqueta="Puntos usados" valor={dinero(c.puntosUsados)} vacio={c.puntosUsados === 0} />
         {esLimpieza && <Fila etiqueta="Financiamiento cobrado" valor={dinero(c.financiamiento)} vacio={c.financiamiento === 0} />}
         {c.iva > 0 && <Fila etiqueta="IVA" valor={dinero(c.iva)} />}

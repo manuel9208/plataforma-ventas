@@ -7,6 +7,7 @@ import * as listaRepo from '../repositories/notasLista.repository.js';
 import * as ventasRepo from '../repositories/ventas.repository.js';
 import * as turnosRepo from '../repositories/turnos.repository.js';
 import { autorizar } from './autorizacion.service.js';
+import { liberarCuponSiCancelada } from './cuponesCaja.service.js';
 import { devolverCanjePorCancelacion, revertirSeguro } from './puntos.service.js';
 import { cargarDetalle } from './notas.service.js';
 import { comprobante } from '../serializers/ajustes.serializer.js';
@@ -158,6 +159,8 @@ export async function cancelar(actor, ventaId, datos, ip) {
       });
     }
     await repo.sumarAjustes(db, e, ventaId, { cancelado: plan.cancelado, ajustado: 0, retenido: plan.retenido, reembolsado: plan.devuelto });
+    // Si la nota quedó cancelada completa, el cupón que usó se libera
+    await liberarCuponSiCancelada(db, { empresaId: e, sucursalId: t.sucursal_id, ventaId, usuarioId: actor.id });
 
     // Los productos cancelados dejan de dar puntos
     if (productos.length) {

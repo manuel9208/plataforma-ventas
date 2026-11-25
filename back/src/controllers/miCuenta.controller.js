@@ -32,3 +32,7 @@ export const aceptarAviso = asyncHandler(async (req, res) => {
 export const puntos = asyncHandler(async (req, res) => {
   res.json(await servicio.puntos(req.cliente));
 });
+
+export const cupones = asyncHandler(async (req, res) => {
+  res.json(await servicio.cupones(req.cliente));
+});

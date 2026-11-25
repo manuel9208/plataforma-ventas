@@ -82,6 +82,7 @@ export async function construirExcel(d) {
       ...(d.esLimpieza ? [['Notas de servicio', c.vendidoNotas], ['Ventas de mostrador', c.vendidoVentas]] : []),
       ['Descuentos por promociones', c.descuentoPromocion],
       ['Descuentos manuales', c.descuentoManual],
+      ['Descuentos por cupones', c.descuentoCupon],
       ['Puntos usados', c.puntosUsados],
       ...(d.esLimpieza ? [['Financiamiento cobrado', c.financiamiento]] : []),
       ['IVA', c.iva],

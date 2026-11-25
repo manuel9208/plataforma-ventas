@@ -48,6 +48,7 @@ export const COLUMNAS_REPORTE = [
   { id: 'transferencia', etiqueta: 'Transferencia', grupo: 'Cómo pagaron', tipo: 'dinero', suma: true },
   { id: 'descuentoPromocion', etiqueta: 'Descuento por promoción', grupo: 'Descuentos', tipo: 'dinero', suma: true },
   { id: 'descuentoManual', etiqueta: 'Descuento manual', grupo: 'Descuentos', tipo: 'dinero', suma: true },
+  { id: 'descuentoCupon', etiqueta: 'Descuento por cupón', grupo: 'Descuentos', tipo: 'dinero', suma: true },
   { id: 'puntosUsados', etiqueta: 'Puntos usados', grupo: 'Descuentos', tipo: 'dinero', suma: true },
   { id: 'financiamiento', etiqueta: 'Financiamiento', grupo: 'Descuentos', tipo: 'dinero', suma: true },
 ];

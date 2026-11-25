@@ -10,3 +10,4 @@ export const promociones = () => apiFetch('/caja/promociones');
 // Para buscar clientes se reutiliza la API de clientes
 export { listar as buscarClientes } from './clientes.service.js';
 export const canje = (clienteId) => apiFetch('/caja/canje', { query: { clienteId } });
+export const cupon = (codigo, clienteId) => apiFetch('/caja/cupon', { query: { codigo, clienteId } });

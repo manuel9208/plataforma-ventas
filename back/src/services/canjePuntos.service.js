@@ -92,7 +92,7 @@ export async function consultarCanje(actor, clienteId) {
   if (actor.esGlobal) throw new ErrorHttp(403, 'El administrador global no opera cajas');
   const e = actor.empresaId;
   const { sucursalId } = await contextoDelTurno(actor);
-  if (!(await moduloActivo(e, 'promociones'))) return { disponible: false };
+  if (!(await moduloActivo(e, 'promociones'))) return { disponible: false, promociones: false };
 
   const cfg = await puntosRepo.cargarConfig(pool, e, sucursalId);
   const cliente = await puntosRepo.cargarCliente(pool, e, clienteId);
@@ -101,6 +101,7 @@ export async function consultarCanje(actor, clienteId) {
   const hoy = await puntosRepo.hoy(pool, e, sucursalId);
   const { saldo, porVencer } = calcularSaldoPuntos(await puntosRepo.movimientosParaSaldo(pool, e, clienteId), hoy);
   return {
+    promociones: true,
     disponible: Boolean((cfg.canjearProductos || cfg.canjearServicios) && cfg.topeCanje > 0 && cfg.valor > 0),
     saldo,
     porVencer,
