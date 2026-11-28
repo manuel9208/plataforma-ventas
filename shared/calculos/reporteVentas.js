@@ -38,7 +38,8 @@ export const COLUMNAS_REPORTE = [
   { id: 'tipo', etiqueta: 'Tipo', grupo: 'Datos', tipo: 'texto' },
   { id: 'estado', etiqueta: 'Estado', grupo: 'Datos', tipo: 'texto', defecto: true },
   { id: 'articulos', etiqueta: 'Qué consumió', grupo: 'Datos', tipo: 'texto' },
-  { id: 'entrega', etiqueta: 'Fecha de entrega', grupo: 'Datos', tipo: 'dia' },
+  { id: 'entrega', etiqueta: 'Fecha prometida', grupo: 'Datos', tipo: 'dia' },
+  { id: 'entregada', etiqueta: 'Última entrega', grupo: 'Datos', tipo: 'fecha' },
   { id: 'total', etiqueta: 'Total', grupo: 'Dinero', tipo: 'dinero', suma: true, defecto: true },
   { id: 'abonado', etiqueta: 'Abonado', grupo: 'Dinero', tipo: 'dinero', suma: true, defecto: true },
   { id: 'pendiente', etiqueta: 'Pendiente', grupo: 'Dinero', tipo: 'dinero', suma: true, defecto: true },
@@ -56,4 +57,41 @@ export const COLUMNAS_REPORTE = [
 export const COLUMNAS_POR_DEFECTO = COLUMNAS_REPORTE.filter((c) => c.defecto).map((c) => c.id);
 
 // Sin servicios (súper) estas columnas no tienen sentido
-export const COLUMNAS_SOLO_LIMPIEZA = ['entrega', 'financiamiento'];
+export const COLUMNAS_SOLO_LIMPIEZA = ['entrega', 'entregada', 'financiamiento'];
+
+// ---------- Cobros de notas de días anteriores ----------
+export const ETIQUETA_FORMA_PAGO = {
+  sin_pago: 'Sin pago',
+  efectivo: 'Efectivo',
+  tarjeta: 'Tarjeta',
+  transferencia: 'Transferencia',
+  mixto: 'Mixto',
+};
+
+// Cómo se pagó un grupo de pagos: una sola forma, varias (mixto) o nada
+export function formaDePago({ efectivo = 0, tarjeta = 0, transferencia = 0 } = {}) {
+  const usadas = [
+    ['efectivo', efectivo],
+    ['tarjeta', tarjeta],
+    ['transferencia', transferencia],
+  ].filter(([, monto]) => Number(monto) > 0);
+  if (!usadas.length) return 'sin_pago';
+  if (usadas.length > 1) return 'mixto';
+  return usadas[0][0];
+}
+
+export const ETIQUETA_SITUACION_COBRO = {
+  liquidada: 'Liquidada',
+  abono: 'Abono (aún debe)',
+  cancelada: 'Cancelada',
+};
+
+// Texto de cómo se pagó: "Efectivo", "Tarjeta"... o "Mixto: Efectivo $50.00 · Tarjeta $30.00"
+export function describirPago(p = {}, dinero = (v) => String(v)) {
+  const forma = formaDePago(p);
+  if (forma !== 'mixto') return ETIQUETA_FORMA_PAGO[forma];
+  const partes = ['efectivo', 'tarjeta', 'transferencia']
+    .filter((k) => Number(p[k]) > 0)
+    .map((k) => `${ETIQUETA_FORMA_PAGO[k]} ${dinero(p[k])}`);
+  return `Mixto: ${partes.join(' · ')}`;
+}

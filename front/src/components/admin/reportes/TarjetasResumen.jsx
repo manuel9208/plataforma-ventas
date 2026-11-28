@@ -24,6 +24,8 @@ export default function TarjetasResumen({ cifras: c }) {
   const { empresa } = useAuth();
   const dinero = (v) => formatearMoneda(v, empresa.moneda);
   const anteriores = c.porCobrarAnteriores;
+  const ya = c.cobradoAnteriores;
+  const irACobros = () => document.getElementById('cobros-anteriores')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   return (
     <div className="space-y-3">
@@ -40,6 +42,15 @@ export default function TarjetasResumen({ cifras: c }) {
       {anteriores.monto > 0 && (
         <p className="rounded-2xl bg-amber-50 text-amber-800 text-sm px-4 py-3">
           Además, hay {dinero(anteriores.monto)} por cobrar de {anteriores.notas} {anteriores.notas === 1 ? 'nota' : 'notas'} de días anteriores.
+        </p>
+      )}
+      {ya?.monto > 0 && (
+        <p className="rounded-2xl bg-[#f3efe6] text-neutral-700 text-sm px-4 py-3">
+          De "Dinero que entró", {dinero(ya.monto)} vinieron de {ya.notas} {ya.notas === 1 ? 'nota' : 'notas'} de días anteriores (
+          {ya.liquidadas} {ya.liquidadas === 1 ? 'quedó liquidada' : 'quedaron liquidadas'}).{' '}
+          <button type="button" onClick={irACobros} className="font-medium underline underline-offset-2">
+            Ver cuáles
+          </button>
         </p>
       )}
     </div>

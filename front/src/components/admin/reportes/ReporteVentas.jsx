@@ -6,6 +6,7 @@ import TarjetasResumen from './TarjetasResumen.jsx';
 import DesgloseReporte from './DesgloseReporte.jsx';
 import TotalesPorSucursal from './TotalesPorSucursal.jsx';
 import TablaReporte from './TablaReporte.jsx';
+import CobrosAnteriores from './CobrosAnteriores.jsx';
 import EstadisticasVentas from './EstadisticasVentas.jsx';
 import ConsumoVentas from './ConsumoVentas.jsx';
 import AnalisisVentas from './AnalisisVentas.jsx';
@@ -71,6 +72,9 @@ export default function ReporteVentas() {
             onColumnas={() => setEligiendo(true)}
             onAbrir={setAbierta}
           />
+          {esLimpieza && r.f.giro !== 'productos' && r.consultaCobros && (
+            <CobrosAnteriores key={JSON.stringify(r.consultaCobros)} consulta={r.consultaCobros} onAbrir={setAbierta} />
+          )}
           <ConsumoVentas consulta={r.consultaConsumo} esLimpieza={esLimpieza} onOrden={(ordenConsumo) => r.cambiarOpcion({ ordenConsumo })} />
           <AnalisisVentas consulta={r.consultaAnalisis} esLimpieza={esLimpieza} onAbrir={setAbierta} />
           <EstadisticasVentas

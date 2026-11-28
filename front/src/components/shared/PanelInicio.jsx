@@ -21,15 +21,15 @@ export default function PanelInicio() {
   const [busqueda, setBusqueda] = useState('');
 
   const tarjetas = useMemo(() => {
-    const lista = puedeEntrarA(usuario, 'admin')
-      ? MODULOS.filter(
-          (m) =>
-            m.rolesPermitidos.includes(usuario.rol) &&
-            (!m.permiso || tienePermiso(usuario.permisos, m.permiso)) &&
-            (!m.giros || m.giros.includes(empresa.tipoNegocio)) &&
-            (!m.modulo || tieneModulo(m.modulo))
-        )
-      : [];
+    const esAdmin = puedeEntrarA(usuario, 'admin');
+    const lista = MODULOS.filter(
+      (m) =>
+        (esAdmin || m.paraTodos) &&
+        m.rolesPermitidos.includes(usuario.rol) &&
+        (!m.permiso || tienePermiso(usuario.permisos, m.permiso)) &&
+        (!m.giros || m.giros.includes(empresa.tipoNegocio)) &&
+        (!m.modulo || tieneModulo(m.modulo))
+    );
     if (puedeEntrarA(usuario, 'caja')) lista.push(TARJETA_CAJA);
     return lista;
   }, [usuario, empresa, tieneModulo]);

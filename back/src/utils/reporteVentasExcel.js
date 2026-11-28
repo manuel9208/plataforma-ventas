@@ -1,12 +1,12 @@
 import ExcelJS from 'exceljs';
-import { aCentavos, aMonto, nombreUnidad } from '@plataforma/calculos';
+import { aCentavos, aMonto, nombreUnidad, describirPago, ETIQUETA_SITUACION_COBRO } from '@plataforma/calculos';
 import { crearFormato, formatoExcelMoneda, textoCelda } from './formatoReporte.js';
 
 const AZUL = 'FF1D2B4F';
 const CREMA = 'FFF3EFE6';
 const GRIS = 'FF6B7280';
 const FORMAS = { efectivo: 'Efectivo', tarjeta: 'Tarjeta', transferencia: 'Transferencia' };
-const ANCHOS = { sucursal: 20, folio: 14, fecha: 18, cliente: 28, telefono: 16, cajero: 20, tipo: 20, estado: 18, entrega: 16, articulos: 60 };
+const ANCHOS = { sucursal: 20, folio: 14, fecha: 18, cliente: 28, telefono: 16, cajero: 20, tipo: 20, estado: 18, entrega: 16, entregada: 18, articulos: 60 };
 
 function estilar(fila, { negrita = false, tam, color, relleno } = {}) {
   fila.eachCell((celda) => {
@@ -67,6 +67,11 @@ export async function construirExcel(d) {
       ['Abonado', c.abonado, 'Lo que han pagado esas notas'],
       ['Pendiente', c.pendiente, 'Lo que esas notas todavía deben'],
       { valores: ['Dinero que entró', c.entro.total, 'Cobrado en el periodo, menos devoluciones'], negrita: true },
+      [
+        '   De eso, cobrado de notas de días anteriores',
+        c.cobradoAnteriores?.monto ?? 0,
+        `${c.cobradoAnteriores?.notas ?? 0} notas · ${c.cobradoAnteriores?.liquidadas ?? 0} liquidadas`,
+      ],
       ['Por cobrar de días anteriores', c.porCobrarAnteriores.monto, `${c.porCobrarAnteriores.notas} notas`],
     ],
   });
@@ -155,6 +160,54 @@ export async function construirExcel(d) {
   if (d.truncado) {
     ws.addRow([]);
     ws.addRow([`Hay ${d.rep.total} registros; aquí van los primeros ${n}. Acota el periodo o los filtros para verlos todos.`]);
+  }
+
+  // ---------- Cobros de notas de días anteriores ----------
+  if (d.cobros) {
+    const cb = d.cobros;
+    const r = cb.resumen;
+    const truncado = cb.total > cb.datos.length;
+    const fh = (iso, zona) => (iso ? fmt.fechaHora(iso, zona) : '');
+    const cols = [
+      { etiqueta: 'Folio', ancho: 14, valor: (x) => x.folio },
+      ...(d.rep.porSucursal.length > 1 ? [{ etiqueta: 'Sucursal', ancho: 20, valor: (x) => x.sucursal }] : []),
+      { etiqueta: 'Cliente', ancho: 28, valor: (x) => x.cliente ?? 'Sin cliente' },
+      { etiqueta: 'Teléfono', ancho: 16, valor: (x) => (x.telefono ? fmt.telefono(x.telefono) : '') },
+      { etiqueta: 'Dejó la nota', ancho: 18, valor: (x) => fh(x.fecha, x.zonaHoraria) },
+      { etiqueta: 'Total de la nota', ancho: 16, fmt: DINERO, valor: (x) => x.total },
+      { etiqueta: 'Primer pago', ancho: 16, fmt: DINERO, suma: true, valor: (x) => x.primerPago.monto },
+      { etiqueta: 'Cómo pagó (primer pago)', ancho: 32, valor: (x) => describirPago(x.primerPago, fmt.dinero) },
+      { etiqueta: 'Cobrado en el periodo', ancho: 18, fmt: DINERO, suma: true, valor: (x) => x.cobrado.monto },
+      { etiqueta: 'Cómo pagó (cobro)', ancho: 32, valor: (x) => describirPago(x.cobrado, fmt.dinero) },
+      { etiqueta: 'Pagos en el periodo', ancho: 12, fmt: ENTERO, valor: (x) => x.cobrado.pagos },
+      { etiqueta: 'Fecha del cobro', ancho: 18, valor: (x) => fh(x.cobrado.fecha, x.zonaHoraria) },
+      { etiqueta: 'Situación', ancho: 18, valor: (x) => ETIQUETA_SITUACION_COBRO[x.situacion] },
+      { etiqueta: 'Liquidada el', ancho: 18, valor: (x) => fh(x.liquidadaEn, x.zonaHoraria) },
+      { etiqueta: 'Todavía debe', ancho: 16, fmt: DINERO, suma: true, valor: (x) => x.pendiente },
+      { etiqueta: 'Fecha prometida', ancho: 16, valor: (x) => (x.entrega ? fmt.fechaDia(x.entrega) : '') },
+      { etiqueta: 'Última entrega', ancho: 18, valor: (x) => fh(x.entregada, x.zonaHoraria) },
+    ];
+    const sumarCon = (fn) => aMonto(cb.datos.reduce((s, x) => s + Math.round(aCentavos(fn(x) ?? 0)), 0));
+    const filas = cb.datos.map((x) => cols.map((k) => k.valor(x)));
+    if (filas.length) {
+      filas.push({
+        valores: cols.map((k, i) => (k.suma ? sumarCon(k.valor) : i === 0 ? (truncado ? 'Total de lo mostrado' : 'Total') : '')),
+        negrita: true,
+      });
+    }
+
+    const hb = wb.addWorksheet('Cobros anteriores');
+    tabla(hb, {
+      titulo: 'Cobros de notas de días anteriores',
+      nota: `${r.notas} notas · ${r.liquidadas} liquidadas · ${fmt.dinero(r.monto)} cobrados (ya van dentro de "Dinero que entró")`,
+      columnas: cols,
+      filas,
+    });
+    if (truncado) {
+      hb.addRow([]);
+      hb.addRow([`Hay ${cb.total} notas; aquí van las primeras ${cb.datos.length}. Acota el periodo para verlas todas.`]);
+    }
+    anchosDe(hb, cols.map((k) => k.ancho));
   }
 
   // ---------- Consumo ----------

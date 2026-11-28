@@ -35,3 +35,7 @@ export const verDetalle = asyncHandler(async (req, res) => {
 export const verAnalisis = asyncHandler(async (req, res) => {
   res.json(await ventas.analisis(req.usuario, req.empresa, req.datos.query));
 });
+
+export const verCobrosAnteriores = asyncHandler(async (req, res) => {
+  res.json(await ventas.cobrosAnteriores(req.usuario, req.datos.query));
+});

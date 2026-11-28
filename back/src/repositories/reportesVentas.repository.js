@@ -66,7 +66,12 @@ const FROM = `
            count(*) FILTER (WHERE ps.estado_trabajo = 'listo') AS listos,
            count(*) FILTER (WHERE ps.estado_trabajo = 'entregado') AS entregados,
            count(*) FILTER (WHERE ps.estado_trabajo = 'cancelado') AS cancelados,
-           min(ps.fecha_prometida) FILTER (WHERE ps.estado_trabajo IN ('recibido', 'en_proceso', 'listo')) AS prometida
+           -- La fecha de lo pendiente; si ya se entregó todo, la de lo entregado (antes quedaba vacía)
+           COALESCE(
+             min(ps.fecha_prometida) FILTER (WHERE ps.estado_trabajo IN ('recibido', 'en_proceso', 'listo')),
+             min(ps.fecha_prometida) FILTER (WHERE ps.estado_trabajo <> 'cancelado'),
+             min(ps.fecha_prometida)
+           ) AS prometida
     FROM venta_partidas vp
     JOIN partida_servicio ps ON ps.partida_id = vp.id AND ps.empresa_id = vp.empresa_id
     WHERE vp.empresa_id = v.empresa_id AND vp.venta_id = v.id AND vp.tipo = 'servicio'
@@ -108,7 +113,9 @@ export async function listar(db, empresaId, sucursales, f, { orden, direccion, l
             ds.promo AS descuento_promocion, ds.manual AS descuento_manual, ds.puntos AS puntos_usados,
             COALESCE(cu.descuento, 0) AS descuento_cupon, fi.financiamiento,
             sv.articulos, sv.en_espera, sv.listos, sv.entregados, sv.cancelados,
-            to_char(sv.prometida, 'YYYY-MM-DD') AS prometida
+            to_char(sv.prometida, 'YYYY-MM-DD') AS prometida,
+            (SELECT max(en.creado_en) FROM venta_entregas en
+             WHERE en.empresa_id = v.empresa_id AND en.venta_id = v.id) AS entregada_en
      ${FROM} ${where}
      ORDER BY ${columna} ${sentido}, v.id
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
@@ -618,4 +625,106 @@ export async function zonaDeSucursal(db, empresaId, sucursalId) {
     [empresaId, sucursalId]
   );
   return r.rows[0]?.zona ?? 'UTC';
+}
+
+// ---------- Cobros de notas de días anteriores ----------
+// Notas creadas ANTES del periodo que recibieron dinero DENTRO del periodo (liquidaciones y abonos).
+// Mismas reglas que "Dinero que entró": cuenta la fecha del pago, el empleado es quien lo recibió y el estado no aplica.
+function cobrosAnterioresCte(f, params) {
+  let extra = '';
+  if (f.giro === 'servicios') extra += ' AND v.tiene_servicios';
+  if (f.giro === 'productos') extra += ' AND NOT v.tiene_servicios';
+  if (f.empleadoId) {
+    params.push(f.empleadoId);
+    extra += ` AND m.usuario_id = $${params.length}`;
+  }
+  return `
+  WITH ca AS (
+    SELECT m.venta_id,
+           COALESCE(sum(m.monto), 0) AS cobrado,
+           COALESCE(sum(m.monto) FILTER (WHERE m.forma = 'efectivo'), 0) AS efectivo,
+           COALESCE(sum(m.monto) FILTER (WHERE m.forma = 'tarjeta'), 0) AS tarjeta,
+           COALESCE(sum(m.monto) FILTER (WHERE m.forma = 'transferencia'), 0) AS transferencia,
+           count(*) AS pagos,
+           max(m.creado_en) AS ultimo_cobro
+    FROM venta_pagos m
+    JOIN ventas v ON v.id = m.venta_id AND v.empresa_id = m.empresa_id
+    JOIN sucursales s ON s.id = v.sucursal_id AND s.empresa_id = v.empresa_id
+    JOIN empresas e ON e.id = v.empresa_id
+    WHERE m.empresa_id = $1 AND v.sucursal_id = ANY($2::bigint[])
+      AND m.creado_en >= ($3::date - 1) AND m.creado_en < ($4::date + 2)
+      AND (m.creado_en AT TIME ZONE ${ZONA})::date BETWEEN $3::date AND $4::date
+      AND v.creado_en < ($3::date + 1)
+      AND (v.creado_en AT TIME ZONE ${ZONA})::date < $3::date${extra}
+    GROUP BY m.venta_id
+  )`;
+}
+
+// Solo las notas cobradas (la condición sobre v.id hace que lo pesado se calcule únicamente para ellas)
+const SOLO_COBRADAS = `
+  JOIN ca ON ca.venta_id = v.id
+  WHERE v.empresa_id = $1 AND v.sucursal_id = ANY($2::bigint[]) AND v.id = ANY(ARRAY(SELECT venta_id FROM ca))`;
+
+export async function listarCobrosAnteriores(db, empresaId, sucursales, f, { limite, pagina }) {
+  exigirEmpresa(empresaId);
+  const params = base(empresaId, sucursales, f);
+  const cte = cobrosAnterioresCte(f, params);
+  params.push(limite, (pagina - 1) * limite);
+  const r = await db.query(
+    `${cte}
+     SELECT v.id, v.folio, v.creado_en, s.nombre AS sucursal, ${ZONA} AS zona,
+            c.nombre AS cliente_nombre, c.telefono AS cliente_telefono,
+            ${VALOR_SQL} AS valor, ${PAGADO_SQL} AS abonado, ${SALDO_SQL} AS saldo, ${CANCELADA} AS cancelada,
+            pp.monto AS primer_monto, pp.efectivo AS primer_efectivo, pp.tarjeta AS primer_tarjeta,
+            pp.transferencia AS primer_transferencia, pp.fecha AS primer_fecha,
+            ca.cobrado, ca.efectivo AS cobrado_efectivo, ca.tarjeta AS cobrado_tarjeta,
+            ca.transferencia AS cobrado_transferencia, ca.pagos, ca.ultimo_cobro,
+            up.ultimo_pago, ve.entregada_en,
+            to_char(sv.prometida, 'YYYY-MM-DD') AS prometida
+     ${FROM}
+     -- Primer pago: lo que se pagó el mismo día en que se dejó la nota (hora de la sucursal)
+     LEFT JOIN LATERAL (
+       SELECT COALESCE(sum(p.monto), 0) AS monto,
+              COALESCE(sum(p.monto) FILTER (WHERE p.forma = 'efectivo'), 0) AS efectivo,
+              COALESCE(sum(p.monto) FILTER (WHERE p.forma = 'tarjeta'), 0) AS tarjeta,
+              COALESCE(sum(p.monto) FILTER (WHERE p.forma = 'transferencia'), 0) AS transferencia,
+              min(p.creado_en) AS fecha
+       FROM venta_pagos p
+       WHERE p.empresa_id = v.empresa_id AND p.venta_id = v.id
+         AND (p.creado_en AT TIME ZONE ${ZONA})::date = (v.creado_en AT TIME ZONE ${ZONA})::date
+     ) pp ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT max(p.creado_en) AS ultimo_pago
+       FROM venta_pagos p WHERE p.empresa_id = v.empresa_id AND p.venta_id = v.id
+     ) up ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT max(en.creado_en) AS entregada_en
+       FROM venta_entregas en WHERE en.empresa_id = v.empresa_id AND en.venta_id = v.id
+     ) ve ON TRUE
+     ${SOLO_COBRADAS}
+     ORDER BY ca.ultimo_cobro DESC, v.id
+     LIMIT $${params.length - 1} OFFSET $${params.length}`,
+    params
+  );
+  return r.rows;
+}
+
+// Totales de todas las notas cobradas (no solo de la página que se ve)
+export async function resumenCobrosAnteriores(db, empresaId, sucursales, f) {
+  exigirEmpresa(empresaId);
+  const params = base(empresaId, sucursales, f);
+  const cte = cobrosAnterioresCte(f, params);
+  const r = await db.query(
+    `${cte}
+     SELECT count(*) AS notas,
+            count(*) FILTER (WHERE ${SALDO_SQL} <= 0 AND NOT ${CANCELADA}) AS liquidadas,
+            COALESCE(sum(ca.cobrado), 0) AS monto,
+            COALESCE(sum(ca.efectivo), 0) AS efectivo,
+            COALESCE(sum(ca.tarjeta), 0) AS tarjeta,
+            COALESCE(sum(ca.transferencia), 0) AS transferencia
+     ${FROM}
+     ${SOLO_COBRADAS}`,
+    params
+  );
+  return r.rows[0] ?? {};
 }

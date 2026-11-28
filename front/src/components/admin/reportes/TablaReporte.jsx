@@ -9,7 +9,7 @@ const SIN_DATO = '—';
 function textoCelda(c, f, dinero) {
   const v = f[c.id];
   if (c.tipo === 'dinero') return v === null || v === undefined ? SIN_DATO : dinero(v);
-  if (c.tipo === 'fecha') return formatearFechaHora(f.fecha, f.zonaHoraria);
+  if (c.tipo === 'fecha') return v ? formatearFechaHora(v, f.zonaHoraria) : SIN_DATO;
   if (c.tipo === 'dia') return v ? formatearFechaLarga(v) : SIN_DATO;
   if (c.id === 'estado') return ETIQUETA_ESTADO_NOTA[v] ?? v;
   if (c.id === 'telefono') return v ? formatearTelefono(v) : SIN_DATO;

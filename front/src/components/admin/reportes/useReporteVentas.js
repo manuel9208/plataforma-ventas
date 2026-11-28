@@ -86,6 +86,19 @@ export function useReporteVentas() {
     };
   }, [rango, validez.ok, f.sucursales, f.empleadoId, f.estado, f.giro, f.orden, f.direccion, f.tipo, f.hastaHoy, f.ordenConsumo]);
 
+  // Cobros de notas de días anteriores: no dependen del estado ni del orden de la tabla
+  const consultaCobros = useMemo(() => {
+    if (!rango || !validez.ok) return null;
+    return {
+      desde: rango.desde,
+      hasta: rango.hasta,
+      sucursales: f.sucursales?.length ? f.sucursales.join(',') : undefined,
+      empleadoId: f.empleadoId || undefined,
+      giro: f.giro,
+    };
+  }, [rango, validez.ok, f.sucursales, f.empleadoId, f.giro]);
+
+
   const consulta = useMemo(() => {
     if (!rango || !validez.ok) return null;
     return {
@@ -175,6 +188,7 @@ export function useReporteVentas() {
     consultaConsumo,
     consultaAnalisis,
     consultaExportar,
+    consultaCobros,
     // Opciones que no mueven la tabla de página
     cambiarOpcion: (parcial) => setF((x) => ({ ...x, ...parcial })),
     validez,

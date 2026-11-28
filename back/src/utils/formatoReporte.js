@@ -50,7 +50,8 @@ export const formatoExcelMoneda = (moneda) =>
 export function textoCelda(c, f, fmt) {
   const v = f[c.id];
   if (c.tipo === 'dinero') return v === null || v === undefined ? '-' : fmt.dinero(v);
-  if (c.tipo === 'fecha') return fmt.fechaHora(f.fecha, f.zonaHoraria);
+  // Cada columna de fecha muestra SU fecha (antes todas mostraban la de creación)
+  if (c.tipo === 'fecha') return v ? fmt.fechaHora(v, f.zonaHoraria) : '-';
   if (c.tipo === 'dia') return v ? fmt.fechaDia(v) : '-';
   if (c.id === 'estado') return ETIQUETA_ESTADO_NOTA[v] ?? v ?? '-';
   if (c.id === 'telefono') return v ? fmt.telefono(v) : '-';

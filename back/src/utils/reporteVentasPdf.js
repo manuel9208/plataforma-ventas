@@ -1,4 +1,4 @@
-import { aCentavos, aMonto, nombreUnidad } from '@plataforma/calculos';
+import { aCentavos, aMonto, nombreUnidad, describirPago, ETIQUETA_SITUACION_COBRO } from '@plataforma/calculos';
 import { COLOR, DocumentoPdf } from './pdfDocumento.js';
 import { crearFormato, textoCelda } from './formatoReporte.js';
 
@@ -13,6 +13,7 @@ const PESOS = {
   tipo: 1.6,
   estado: 1.3,
   entrega: 1.2,
+  entregada: 1.5,
   articulos: 4,
   descuentoPromocion: 1.3,
   descuentoManual: 1.2,
@@ -61,6 +62,13 @@ export async function construirPdf(d) {
   ]);
   if (c.porCobrarAnteriores.monto > 0) {
     doc.parrafo(`Además, hay ${fmt.dinero(c.porCobrarAnteriores.monto)} por cobrar de ${c.porCobrarAnteriores.notas} notas de días anteriores.`, { color: COLOR.ambar });
+  }
+  const ya = c.cobradoAnteriores;
+  if (ya?.monto > 0) {
+    doc.parrafo(
+      `De "Dinero que entró", ${fmt.dinero(ya.monto)} vinieron de ${ya.notas} ${ya.notas === 1 ? 'nota' : 'notas'} de días anteriores (${ya.liquidadas} ${ya.liquidadas === 1 ? 'quedó liquidada' : 'quedaron liquidadas'}).`,
+      { color: COLOR.suave }
+    );
   }
 
   const grupo = (t) => ({ celdas: [t, ''], negrita: true, fondo: COLOR.crema });
@@ -118,6 +126,43 @@ export async function construirPdf(d) {
     filaTotal,
     vacio: 'No hay notas ni ventas con esos filtros.',
   });
+
+  // ---------- Cobros de notas de días anteriores ----------
+  if (d.cobros) {
+    const cb = d.cobros;
+    const r = cb.resumen;
+    const truncado = cb.total > cb.datos.length;
+    const fh = (iso, zona) => (iso ? fmt.fechaHora(iso, zona) : '-');
+    const sumarCon = (fn) => fmt.dinero(aMonto(cb.datos.reduce((s, x) => s + Math.round(aCentavos(fn(x) ?? 0)), 0)));
+    const cols = [
+      { etiqueta: 'Folio', peso: 1.1, celda: (x) => x.folio },
+      ...(d.rep.porSucursal.length > 1 ? [{ etiqueta: 'Sucursal', peso: 1.3, celda: (x) => x.sucursal }] : []),
+      { etiqueta: 'Cliente', peso: 1.8, celda: (x) => x.cliente ?? 'Sin cliente' },
+      { etiqueta: 'Dejó la nota', peso: 1.5, celda: (x) => fh(x.fecha, x.zonaHoraria) },
+      { etiqueta: 'Total', peso: 1.1, ...derecha, celda: (x) => fmt.dinero(x.total) },
+      { etiqueta: 'Primer pago', peso: 1.1, ...derecha, celda: (x) => fmt.dinero(x.primerPago.monto), suma: (x) => x.primerPago.monto },
+      { etiqueta: 'Cómo pagó', peso: 1.6, envolver: 2, celda: (x) => describirPago(x.primerPago, fmt.dinero) },
+      { etiqueta: 'Cobrado en el periodo', peso: 1.2, ...derecha, celda: (x) => fmt.dinero(x.cobrado.monto), suma: (x) => x.cobrado.monto },
+      { etiqueta: 'Cómo pagó', peso: 1.6, envolver: 2, celda: (x) => describirPago(x.cobrado, fmt.dinero) },
+      { etiqueta: 'Fecha del cobro', peso: 1.5, celda: (x) => fh(x.cobrado.fecha, x.zonaHoraria) },
+      { etiqueta: 'Situación', peso: 1.3, celda: (x) => ETIQUETA_SITUACION_COBRO[x.situacion] },
+      { etiqueta: 'Debe', peso: 1, ...derecha, celda: (x) => fmt.dinero(x.pendiente), suma: (x) => x.pendiente },
+      { etiqueta: 'Última entrega', peso: 1.5, celda: (x) => fh(x.entregada, x.zonaHoraria) },
+    ];
+
+    doc.seccion(
+      'Cobros de notas de días anteriores',
+      `${r.notas} ${r.notas === 1 ? 'nota' : 'notas'} · ${r.liquidadas} liquidadas · ${fmt.dinero(r.monto)} (ya va dentro de "Dinero que entró")`
+    );
+    if (truncado) doc.parrafo(`Se muestran las primeras ${cb.datos.length} de ${cb.total}. Acota el periodo para verlas todas.`, { color: COLOR.ambar, tam: 8.5 });
+    doc.tabla({
+      columnas: cols.map(({ etiqueta, peso, alinear, envolver }) => ({ etiqueta, peso, alinear, envolver })),
+      filas: cb.datos.map((x) => ({ celdas: cols.map((k) => k.celda(x)), suave: x.situacion === 'cancelada' })),
+      fuente: 7,
+      filaTotal: cb.datos.length ? cols.map((k, i) => (k.suma ? sumarCon(k.suma) : i === 0 ? (truncado ? 'Total de lo mostrado' : 'Total') : '')) : null,
+      vacio: 'Ninguna nota de días anteriores recibió pagos en este periodo.',
+    });
+  }
 
   // ---------- Consumo ----------
   const { con } = d;

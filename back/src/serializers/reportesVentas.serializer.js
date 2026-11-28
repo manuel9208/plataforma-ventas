@@ -1,4 +1,4 @@
-import { aCentavos, aMonto } from '@plataforma/calculos';
+import { aCentavos, aMonto, formaDePago } from '@plataforma/calculos';
 import { estadoDesdeContadores } from './notas.serializer.js';
 
 const n = (v) => Number(v ?? 0);
@@ -21,6 +21,7 @@ export function filaVenta(f, articulos = null) {
     tipo: f.tiene_servicios ? 'Nota de servicio' : 'Venta de mostrador',
     estado,
     entrega: f.prometida ?? null,
+    entregada: f.entregada_en ?? null,
     total: n(f.valor),
     abonado: n(f.abonado),
     pendiente: cancelada ? 0 : n(f.saldo),
@@ -44,8 +45,20 @@ const porForma = (filas, sucursalId) => {
   return r;
 };
 
+// Totales de los cobros de notas de días anteriores
+export function resumenCobros(r = {}) {
+  return {
+    notas: n(r.notas),
+    liquidadas: n(r.liquidadas),
+    monto: n(r.monto),
+    efectivo: n(r.efectivo),
+    tarjeta: n(r.tarjeta),
+    transferencia: n(r.transferencia),
+  };
+}
+
 // Une todo en la respuesta del reporte. Cada sucursal elegida aparece, aunque no haya vendido.
-export function respuestaVentas({ filas, grupos, pagos, devoluciones, atras, sucursales, consulta, total, resumenes = null }) {
+export function respuestaVentas({ filas, grupos, pagos, devoluciones, atras, cobrados = null, sucursales, consulta, total, resumenes = null }) {
   const porSucursal = sucursales.map((s) => {
     const sid = n(s.id);
     const g = grupos.find((x) => n(x.sucursal_id) === sid) ?? {};
@@ -97,6 +110,8 @@ export function respuestaVentas({ filas, grupos, pagos, devoluciones, atras, suc
       total: aMonto(porSucursal.reduce((s, x) => s + c(x.entro.total), 0)),
     },
     porCobrarAnteriores: { notas: atras.notas, monto: atras.monto },
+    // Parte de "Dinero que entró" que vino de notas de días anteriores
+    cobradoAnteriores: resumenCobros(cobrados ?? {}),
   };
 
   return {
@@ -105,6 +120,59 @@ export function respuestaVentas({ filas, grupos, pagos, devoluciones, atras, suc
     porSucursal,
     datos: filas.map((f) => filaVenta(f, resumenes?.get(String(f.id)) ?? null)),
     total,
+    pagina: consulta.pagina,
+    limite: consulta.limite,
+  };
+}
+
+// ---------- Cobros de notas de días anteriores ----------
+const desglose = (efectivo, tarjeta, transferencia) => {
+  const d = { efectivo: n(efectivo), tarjeta: n(tarjeta), transferencia: n(transferencia) };
+  return { ...d, forma: formaDePago(d) };
+};
+
+export function filaCobroAnterior(f) {
+  const cancelada = Boolean(f.cancelada);
+  const pendiente = cancelada ? 0 : Math.max(0, n(f.saldo));
+  const situacion = cancelada ? 'cancelada' : pendiente === 0 ? 'liquidada' : 'abono';
+  return {
+    id: f.id,
+    folio: f.folio,
+    sucursal: f.sucursal,
+    zonaHoraria: f.zona,
+    cliente: f.cliente_nombre ?? null,
+    telefono: f.cliente_telefono ?? null,
+    fecha: f.creado_en,
+    total: n(f.valor),
+    abonado: n(f.abonado),
+    pendiente,
+    situacion,
+    // Lo que pagó el día que dejó la nota
+    primerPago: {
+      monto: n(f.primer_monto),
+      ...desglose(f.primer_efectivo, f.primer_tarjeta, f.primer_transferencia),
+      fecha: f.primer_fecha ?? null,
+    },
+    // Lo que pagó dentro del periodo del reporte (la liquidación o el abono)
+    cobrado: {
+      monto: n(f.cobrado),
+      ...desglose(f.cobrado_efectivo, f.cobrado_tarjeta, f.cobrado_transferencia),
+      pagos: n(f.pagos),
+      fecha: f.ultimo_cobro,
+    },
+    liquidadaEn: situacion === 'liquidada' ? f.ultimo_pago ?? null : null,
+    entrega: f.prometida ?? null,
+    entregada: f.entregada_en ?? null,
+  };
+}
+
+export function respuestaCobrosAnteriores({ filas, resumen, consulta }) {
+  const r = resumenCobros(resumen);
+  return {
+    periodo: { desde: consulta.desde, hasta: consulta.hasta },
+    resumen: r,
+    datos: filas.map(filaCobroAnterior),
+    total: r.notas,
     pagina: consulta.pagina,
     limite: consulta.limite,
   };

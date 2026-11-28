@@ -13,7 +13,7 @@ import { ErrorHttp } from '../utils/errores.js';
 import { listarSucursalesPorIds } from '../repositories/usuarios.repository.js';
 import * as repo from '../repositories/reportesVentas.repository.js';
 import { hoy as hoyDeSucursal } from '../repositories/puntos.repository.js';
-import { respuestaVentas } from '../serializers/reportesVentas.serializer.js';
+import { respuestaVentas, respuestaCobrosAnteriores } from '../serializers/reportesVentas.serializer.js';
 import { detalleVenta as serializarDetalle, respuestaConsumo, resumenesPorVenta } from '../serializers/consumoVentas.serializer.js';
 import { respuestaAnalisis } from '../serializers/analisisVentas.serializer.js';
 
@@ -41,18 +41,19 @@ export async function ventas(actor, q) {
   if (!sucursales.length) throw new ErrorHttp(403, 'No tienes sucursales asignadas');
   const f = { desde: q.desde, hasta: q.hasta, empleadoId: q.empleadoId, estado: q.estado, giro: q.giro };
 
-  const [filas, grupos, pagos, devoluciones, atras, nombres] = await Promise.all([
+  const [filas, grupos, pagos, devoluciones, atras, nombres, cobrados] = await Promise.all([
     repo.listar(pool, e, sucursales, f, { orden: q.orden, direccion: q.direccion, limite: q.limite, pagina: q.pagina }),
     repo.totalesPorSucursal(pool, e, sucursales, f),
     repo.dineroPorForma(pool, e, sucursales, f, 'pagos'),
     repo.dineroPorForma(pool, e, sucursales, f, 'reembolsos'),
     repo.porCobrarAnteriores(pool, e, sucursales, f),
     listarSucursalesPorIds(pool, e, sucursales),
+    repo.resumenCobrosAnteriores(pool, e, sucursales, f),
   ]);
 
   const total = grupos.reduce((s, g) => s + Number(g.notas), 0);
   const resumenes = resumenesPorVenta(await repo.resumenArticulos(pool, e, filas.map((x) => x.id)));
-  return respuestaVentas({ filas, grupos, pagos, devoluciones, atras, sucursales: nombres, consulta: q, total, resumenes });
+  return respuestaVentas({ filas, grupos, pagos, devoluciones, atras, cobrados, sucursales: nombres, consulta: q, total, resumenes });
 }
 
 const sumaDe = (grupos, clave) => grupos.reduce((s, g) => s + Math.round(aCentavos(Number(g[clave] ?? 0))), 0);
@@ -196,4 +197,18 @@ export async function analisis(actor, _empresa, q) {
     periodo: { desde: q.desde, hasta: q.hasta },
     hastaContado,
   });
+}
+
+// Notas de días anteriores que se liquidaron o abonaron dentro del periodo (para cuadrar "Dinero que entró")
+export async function cobrosAnteriores(actor, q) {
+  const e = actor.empresaId;
+  const sucursales = resolverSucursales(actor, q.sucursales);
+  if (!sucursales.length) throw new ErrorHttp(403, 'No tienes sucursales asignadas');
+  const f = { desde: q.desde, hasta: q.hasta, empleadoId: q.empleadoId, giro: q.giro };
+
+  const [filas, resumen] = await Promise.all([
+    repo.listarCobrosAnteriores(pool, e, sucursales, f, { limite: q.limite, pagina: q.pagina }),
+    repo.resumenCobrosAnteriores(pool, e, sucursales, f),
+  ]);
+  return respuestaCobrosAnteriores({ filas, resumen, consulta: q });
 }

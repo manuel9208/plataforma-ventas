@@ -9,6 +9,7 @@ import * as repo from '../repositories/reportesVentas.repository.js';
 import * as reporte from './reportesVentas.service.js';
 
 const MAX_FILAS = 5000;
+const MAX_COBROS = 500;
 const TIPOS = {
   pdf: { tipo: 'application/pdf', extension: 'pdf' },
   excel: { tipo: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', extension: 'xlsx' },
@@ -30,12 +31,17 @@ export async function exportar(actor, empresa, formato, q, ip) {
     const base = { desde: q.desde, hasta: q.hasta, sucursales: q.sucursales, empleadoId: q.empleadoId, estado: q.estado, giro: q.giro };
 
     // Todo sale de las mismas funciones que usa la pantalla: las cifras nunca pueden diferir
-    const [rep, est, con, ana, opc] = await Promise.all([
+    // Los cobros de notas viejas solo aplican a notas de servicio
+    const conCobros = esLimpieza && q.giro !== 'productos';
+    const baseCobros = { desde: q.desde, hasta: q.hasta, sucursales: q.sucursales, empleadoId: q.empleadoId, giro: q.giro };
+
+    const [rep, est, con, ana, opc, cobros] = await Promise.all([
       reporte.ventas(actor, { ...base, orden: q.orden, direccion: q.direccion, limite: MAX_FILAS, pagina: 1 }),
       reporte.estadisticas(actor, empresa, { ...base, periodo: q.periodo, hastaHoy: q.hastaHoy }),
       reporte.consumo(actor, empresa, { ...base, orden: q.ordenConsumo }),
       reporte.analisis(actor, empresa, base),
       q.empleadoId ? reporte.opciones(actor) : null,
+      conCobros ? reporte.cobrosAnteriores(actor, { ...baseCobros, limite: MAX_COBROS, pagina: 1 }) : null,
     ]);
 
     const idsSucursal = rep.porSucursal.map((s) => s.sucursalId);
@@ -72,6 +78,7 @@ export async function exportar(actor, empresa, formato, q, ip) {
       est,
       con,
       ana,
+      cobros,
     };
 
     const buffer = formato === 'pdf' ? await construirPdf(datos) : await construirExcel(datos);

@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import * as cuentaService from '../../../services/cuentaGlobal.service.js';
+import { useAuth } from '../../../context/AuthContext.jsx';
+import CuentaEmpleado from './CuentaEmpleado.jsx';
 import EncabezadoApp from '../../shared/EncabezadoApp.jsx';
 import Boton from '../../shared/Boton.jsx';
 import Campo from '../../shared/Campo.jsx';
 
 const soloDigitos = (v, max) => v.replace(/\D/g, '').slice(0, max);
 
-export default function AdminCuenta() {
+function CuentaGlobal() {
   const [f, setF] = useState(null);
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
@@ -83,4 +85,10 @@ export default function AdminCuenta() {
       </main>
     </>
   );
+}
+
+// El AdminGlobal conserva su pantalla; cualquier empleado ve la suya
+export default function AdminCuenta() {
+  const { usuario } = useAuth();
+  return usuario?.rol === 'adminglobal' ? <CuentaGlobal /> : <CuentaEmpleado />;
 }

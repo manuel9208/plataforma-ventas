@@ -202,7 +202,9 @@ export const MODULOS = [
     icono: '🛡️',
     ruta: '/admin/cuenta',
     permiso: null,
-    rolesPermitidos: ['adminglobal'],
+    rolesPermitidos: ['adminglobal', ...TODOS_LOS_ROLES],
+    // Se muestra aunque no entre a Administración (cajeros, auxiliares…)
+    paraTodos: true,
     permisos: [],
     componente: lazy(() => import('../components/admin/cuenta/AdminCuenta.jsx')),
   },

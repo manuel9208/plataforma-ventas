@@ -75,3 +75,8 @@ export const exportarQuery = filtros
       .optional(),
   })
   .refine(rangoOk, rangoError);
+
+  // Cobros de notas de días anteriores: mismos filtros, con páginas; van del cobro más reciente al más viejo
+export const cobrosAnterioresQuery = filtros
+  .omit({ orden: true, direccion: true })
+  .refine(rangoOk, rangoError);
